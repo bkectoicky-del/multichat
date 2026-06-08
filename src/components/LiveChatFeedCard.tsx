@@ -18,7 +18,7 @@ export default function LiveChatFeedCard({ chatHistory, onPlaySingleSpeech }: Li
   }, [chatHistory]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden h-[540px] md:h-full">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden h-[600px]">
       {/* Header Bar */}
       <div className="p-4 px-5 border-b border-slate-850 bg-slate-900/60 flex items-center justify-between">
         <span className="text-slate-200 font-bold text-sm flex items-center gap-2">

@@ -23,6 +23,9 @@ interface SourcePlatformCardProps {
   onDisconnectFacebook: () => void;
 
   onSimulateMessage: (author: string, message: string, platform: "tiktok" | "youtube" | "facebook" | "simulation") => void;
+
+  customApiUrl: string;
+  onChangeCustomApiUrl: (val: string) => void;
 }
 
 export default function SourcePlatformCard({
@@ -46,6 +49,9 @@ export default function SourcePlatformCard({
   onDisconnectFacebook,
 
   onSimulateMessage,
+
+  customApiUrl,
+  onChangeCustomApiUrl,
 }: SourcePlatformCardProps) {
   const [ytInput, setYtInput] = useState("");
   
@@ -84,7 +90,7 @@ export default function SourcePlatformCard({
   };
 
   // Connect-code generator
-  const bookmarkletCode = generateBookmarkletCode(appUrl);
+  const bookmarkletCode = generateBookmarkletCode(customApiUrl || appUrl);
   const handleCopyConsoleCode = () => {
     const unescaped = decodeURIComponent(bookmarkletCode.replace(/^javascript:/, ""));
     navigator.clipboard.writeText(unescaped);
@@ -101,6 +107,23 @@ export default function SourcePlatformCard({
       </div>
 
       <div className="space-y-4">
+        {/* Dynamic Stateful Server Config for Vercel/Static Deployments Fallback */}
+        <div className="p-3 bg-slate-950/50 rounded-xl border border-slate-800/80 space-y-2">
+          <label className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+            🔌 SERVER API URL (VERCEL FALLBACK)
+          </label>
+          <div className="text-[10.5px] text-slate-400 leading-normal">
+            Kosongkan bila berjalan di AI Studio. Isi bila di-hosting di Vercel agar data chat terarah ke server container pemrosesan Anda!
+          </div>
+          <input
+            type="text"
+            placeholder="Contoh: https://ais-pre-...run.app"
+            value={customApiUrl}
+            onChange={(e) => onChangeCustomApiUrl(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs font-medium text-slate-350 focus:outline-none focus:border-indigo-500/50 transition-colors"
+          />
+        </div>
+
         {/* TikTok Platform Card Block */}
         <div className="space-y-4 p-4 bg-slate-950/40 rounded-xl border border-slate-800">
           <div className="flex justify-between items-center">

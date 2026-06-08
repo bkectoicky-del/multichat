@@ -128,7 +128,9 @@ export default function OBSOverlayView({ appUrl }: OBSOverlayViewProps) {
 
   // SSE Stream Listening
   useEffect(() => {
-    const sseUrl = `${appUrl}/api/chat/events`;
+    const customUrl = localStorage.getItem("live_tts_custom_api_url") || "";
+    const resolvedBase = customUrl ? customUrl.replace(/\/$/, "") : appUrl;
+    const sseUrl = `${resolvedBase}/api/chat/events`;
     console.log("[Overlay] Connecting SSE:", sseUrl);
 
     const sse = new EventSource(sseUrl);

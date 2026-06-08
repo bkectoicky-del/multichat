@@ -79,6 +79,17 @@ export default function App() {
     playOverlay: true,
   });
 
+  const [customApiUrl, setCustomApiUrl] = useState<string>(() => {
+    return localStorage.getItem("live_tts_custom_api_url") || "";
+  });
+
+  const handleCustomApiUrlChange = (val: string) => {
+    setCustomApiUrl(val);
+    localStorage.setItem("live_tts_custom_api_url", val);
+  };
+
+  const apiBase = customApiUrl ? customApiUrl.replace(/\/$/, "") : "";
+
   const sseRef = useRef<EventSource | null>(null);
   const dashboardSpeechQueueRef = useRef<ChatMessage[]>([]);
   const isDashboardSpeakingRef = useRef<boolean>(false);
@@ -108,7 +119,7 @@ export default function App() {
     }
 
     // Fetch message history log
-    fetch("/api/chat/history")
+    fetch(apiBase + "/api/chat/history")
       .then((res) => res.json())
       .then((data) => {
         if (data.history) {
@@ -118,27 +129,31 @@ export default function App() {
       .catch((err) => console.error("Error fetching chat history logs:", err));
 
     // Fetch active TikTok connection status
-    fetch("/api/chat/tiktok/status")
+    fetch(apiBase + "/api/chat/tiktok/status")
       .then((res) => res.json())
       .then((data) => {
         if (data.connected && data.username) {
           setIsTiktokConnected(true);
           setTiktokUsername(data.username);
+        } else {
+          setIsTiktokConnected(false);
         }
       })
       .catch((err) => console.error("Error syncing active TikTok status:", err));
 
     // Fetch active Facebook connection status
-    fetch("/api/chat/facebook/status")
+    fetch(apiBase + "/api/chat/facebook/status")
       .then((res) => res.json())
       .then((data) => {
         if (data.connected && data.pageId) {
           setIsFacebookConnected(true);
           setFacebookPageId(data.pageId);
+        } else {
+          setIsFacebookConnected(false);
         }
       })
       .catch((err) => console.error("Error syncing active Facebook status:", err));
-  }, [isOverlayRoute]);
+  }, [isOverlayRoute, apiBase]);
 
   // Persists changes to Settings
   const handleSettingsChange = (newSettings: SpeechSettings) => {
@@ -208,8 +223,8 @@ export default function App() {
   useEffect(() => {
     if (isOverlayRoute) return;
 
-    console.log("[Dashboard] Initializing Event Source listener...");
-    const sse = new EventSource("/api/chat/events");
+    console.log("[Dashboard] Initializing Event Source listener to:", apiBase + "/api/chat/events");
+    const sse = new EventSource(apiBase + "/api/chat/events");
     sseRef.current = sse;
 
     sse.onopen = () => {
@@ -259,7 +274,7 @@ export default function App() {
         sseRef.current.close();
       }
     };
-  }, [isOverlayRoute, settings]);
+  }, [isOverlayRoute, settings, apiBase]);
 
   // Repeated voice triggered manually from row action
   const handlePlaySingleSpeech = (msg: ChatMessage) => {
@@ -298,7 +313,7 @@ export default function App() {
   // Start polling YouTube
   const handleStartYoutubePoll = (videoId: string) => {
     showNotification("info", "youtube", "Menghubungkan YouTube", "Memulai polling server untuk YouTube Live Chat...");
-    fetch("/api/chat/youtube/start", {
+    fetch(apiBase + "/api/chat/youtube/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ videoId }),
@@ -330,7 +345,7 @@ export default function App() {
 
   // Stop polling YouTube
   const handleStopYoutubePoll = () => {
-    fetch("/api/chat/youtube/stop", { method: "POST" })
+    fetch(apiBase + "/api/chat/youtube/stop", { method: "POST" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -348,7 +363,7 @@ export default function App() {
       return;
     }
     setIsTiktokConnecting(true);
-    fetch("/api/chat/tiktok/connect", {
+    fetch(apiBase + "/api/chat/tiktok/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: tiktokUsername }),
@@ -388,7 +403,7 @@ export default function App() {
   };
 
   const handleDisconnectTiktok = () => {
-    fetch("/api/chat/tiktok/disconnect", { method: "POST" })
+    fetch(apiBase + "/api/chat/tiktok/disconnect", { method: "POST" })
       .then((res) => res.json())
       .then((data) => {
         setIsTiktokConnected(false);
@@ -408,7 +423,7 @@ export default function App() {
       return;
     }
     setIsFacebookConnecting(true);
-    fetch("/api/chat/facebook/connect", {
+    fetch(apiBase + "/api/chat/facebook/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pageId: facebookPageId }),
@@ -438,7 +453,7 @@ export default function App() {
   };
 
   const handleDisconnectFacebook = () => {
-    fetch("/api/chat/facebook/disconnect", { method: "POST" })
+    fetch(apiBase + "/api/chat/facebook/disconnect", { method: "POST" })
       .then((res) => res.json())
       .then((data) => {
         setIsFacebookConnected(false);
@@ -457,7 +472,7 @@ export default function App() {
     message: string,
     platform: "tiktok" | "youtube" | "facebook" | "simulation"
   ) => {
-    fetch("/api/chat/simulate", {
+    fetch(apiBase + "/api/chat/simulate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ author, message, platform }),
@@ -466,7 +481,7 @@ export default function App() {
 
   // Clear Chat History Logs
   const handleClearHistory = () => {
-    fetch("/api/chat/clear", { method: "POST" })
+    fetch(apiBase + "/api/chat/clear", { method: "POST" })
       .then((res) => res.json())
       .then((data) => {
         if (data.success) {
@@ -540,6 +555,9 @@ export default function App() {
               onDisconnectFacebook={handleDisconnectFacebook}
 
               onSimulateMessage={handleSimulateMessage}
+
+              customApiUrl={customApiUrl}
+              onChangeCustomApiUrl={handleCustomApiUrlChange}
             />
           </div>
 
