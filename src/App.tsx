@@ -127,6 +127,17 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Error syncing active TikTok status:", err));
+
+    // Fetch active Facebook connection status
+    fetch("/api/chat/facebook/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.connected && data.pageId) {
+          setIsFacebookConnected(true);
+          setFacebookPageId(data.pageId);
+        }
+      })
+      .catch((err) => console.error("Error syncing active Facebook status:", err));
   }, [isOverlayRoute]);
 
   // Persists changes to Settings
@@ -390,33 +401,54 @@ export default function App() {
       });
   };
 
-  // Facebook connection simulator triggers
+  // Facebook connection triggers
   const handleConnectFacebook = () => {
     if (!facebookPageId.trim()) {
       showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan Page ID Facebook terlebih dahulu!");
       return;
     }
     setIsFacebookConnecting(true);
-    setTimeout(() => {
-      setIsFacebookConnecting(false);
-      setIsFacebookConnected(true);
-      showNotification(
-        "success",
-        "facebook",
-        "Facebook Terhubung",
-        `Berhasil terhubung ke Facebook Live Page ID: ${facebookPageId}!`
-      );
-      handleSimulateMessage(
-        "Sistem",
-        `[KONEKSI AKTIF] Terhubung ke Facebook Live Page [ID: ${facebookPageId}]. Memulai monitoring live chat...`,
-        "facebook"
-      );
-    }, 1000);
+    fetch("/api/chat/facebook/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: facebookPageId }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setIsFacebookConnecting(false);
+        if (data.success) {
+          setIsFacebookConnected(true);
+          showNotification(
+            "success",
+            "facebook",
+            "Facebook Terhubung",
+            `Berhasil terhubung ke Facebook Live Page ID: ${data.pageId}!`
+          );
+        } else {
+          setIsFacebookConnected(false);
+          showNotification("error", "facebook", "Koneksi Gagal", "Gagal menghubungkan ke Facebook Live Page.");
+        }
+      })
+      .catch((e) => {
+        console.error("Error connecting Facebook:", e);
+        setIsFacebookConnecting(false);
+        setIsFacebookConnected(false);
+        showNotification("error", "facebook", "Koneksi Gagal", "Terjadi kesalahan jaringan.");
+      });
   };
 
   const handleDisconnectFacebook = () => {
-    setIsFacebookConnected(false);
-    showNotification("info", "facebook", "Facebook Terputus", "Koneksi ke Facebook live chat dihentikan.");
+    fetch("/api/chat/facebook/disconnect", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        setIsFacebookConnected(false);
+        showNotification("info", "facebook", "Facebook Terputus", "Koneksi ke Facebook live chat dihentikan.");
+      })
+      .catch((e) => {
+        console.error("Error disconnecting Facebook:", e);
+        setIsFacebookConnected(false);
+        showNotification("info", "facebook", "Facebook Terputus", "Koneksi dihentikan.");
+      });
   };
 
   // Simulate comment injection
@@ -431,50 +463,6 @@ export default function App() {
       body: JSON.stringify({ author, message, platform }),
     }).catch((e) => console.error("Error triggering simulation chat message", e));
   };
-
-  // Automated simulation traffic generator when connected to active streams
-  useEffect(() => {
-    if (isOverlayRoute) return;
-
-    const interval = setInterval(() => {
-      const activePlatforms: ("tiktok" | "facebook" | "youtube")[] = [];
-      if (isTiktokConnected) activePlatforms.push("tiktok");
-      if (isFacebookConnected) activePlatforms.push("facebook");
-      if (activeYoutubeVideoId) activePlatforms.push("youtube");
-
-      if (activePlatforms.length === 0) return;
-
-      const pForm = activePlatforms[Math.floor(Math.random() * activePlatforms.length)];
-
-      const names = [
-        "Budi Santoso", "Siti Aminah", "Rian Hidayat", "Andi Wijaya", "Dewi Lestari", 
-        "Adi Saputra", "Rizky Pratama", "Lilis", "Eko Prasetyo", "Mega", "Dian", 
-        "Hendra", "Ahmad", "Sari", "Genta", "Kevin", "Intan", "Yudi", "Rina", "Agus"
-      ];
-      const messages = [
-        "Keren banget bang! Semangat terus streamingnya",
-        "Sapa aku dong kakak ganteng/cantik",
-        "Request lagu dong!",
-        "Hadir menonton dari Bandung kakak",
-        "Suaranya jernih banget nih",
-        "Mantap kali penjelasannya bang",
-        "Koneksinya lancar jaya ya",
-        "Wah, TTS-nya responsif beneran!",
-        "Bisa dibaca ga ya chatku ini?",
-        "Halo bang, salam kenal dari Surabaya",
-        "Kembangkan terus aplikasinya",
-        "Nice stream!",
-        "Spam lope lope dulu guys ❤️❤️"
-      ];
-
-      const randomName = names[Math.floor(Math.random() * names.length)];
-      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
-
-      handleSimulateMessage(randomName, randomMsg, pForm);
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [isTiktokConnected, isFacebookConnected, activeYoutubeVideoId, isOverlayRoute]);
 
   // Clear Chat History Logs
   const handleClearHistory = () => {
