@@ -116,6 +116,17 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Error fetching chat history logs:", err));
+
+    // Fetch active TikTok connection status
+    fetch("/api/chat/tiktok/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.connected && data.username) {
+          setIsTiktokConnected(true);
+          setTiktokUsername(data.username);
+        }
+      })
+      .catch((err) => console.error("Error syncing active TikTok status:", err));
   }, [isOverlayRoute]);
 
   // Persists changes to Settings
@@ -319,33 +330,64 @@ export default function App() {
       .catch((e) => console.error("Error stopping YouTube poller:", e));
   };
 
-  // TikTok connection simulator triggers
+  // TikTok actual connection triggers
   const handleConnectTiktok = () => {
     if (!tiktokUsername.trim()) {
       showNotification("error", "tiktok", "Gagal Menghubungkan", "Masukkan username TikTok terlebih dahulu!");
       return;
     }
     setIsTiktokConnecting(true);
-    setTimeout(() => {
-      setIsTiktokConnecting(false);
-      setIsTiktokConnected(true);
-      showNotification(
-        "success",
-        "tiktok",
-        "TikTok Terhubung",
-        `Berhasil terhubung ke siaran live ${tiktokUsername}!`
-      );
-      handleSimulateMessage(
-        "Sistem",
-        `[KONEKSI AKTIF] Terhubung ke siaran TikTok ${tiktokUsername}. Memulai monitoring live chat...`,
-        "tiktok"
-      );
-    }, 1000);
+    fetch("/api/chat/tiktok/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: tiktokUsername }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setIsTiktokConnecting(false);
+        if (data.success) {
+          setIsTiktokConnected(true);
+          showNotification(
+            "success",
+            "tiktok",
+            "TikTok Terhubung",
+            `Berhasil terhubung ke siaran live @${data.username}!`
+          );
+          handleSimulateMessage(
+            "Sistem",
+            `[KONEKSI AKTIF] Berhasil terhubung ke live stream TikTok @${data.username}. Memulai monitoring live chat...`,
+            "tiktok"
+          );
+        } else {
+          setIsTiktokConnected(false);
+          showNotification(
+            "error",
+            "tiktok",
+            "Gagal Menghubungkan",
+            data.error || "Gagal menghubungi akun TikTok ini. Pastikan akun sedang LIVE!"
+          );
+        }
+      })
+      .catch((e) => {
+        console.error("Error connecting to TikTok live:", e);
+        setIsTiktokConnecting(false);
+        setIsTiktokConnected(false);
+        showNotification("error", "tiktok", "Koneksi Gagal", "Terjadi kesalahan jaringan.");
+      });
   };
 
   const handleDisconnectTiktok = () => {
-    setIsTiktokConnected(false);
-    showNotification("info", "tiktok", "TikTok Terputus", "Koneksi ke TikTok live chat dihentikan.");
+    fetch("/api/chat/tiktok/disconnect", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        setIsTiktokConnected(false);
+        showNotification("info", "tiktok", "TikTok Terputus", "Koneksi ke TikTok live chat dihentikan.");
+      })
+      .catch((e) => {
+        console.error("Error disconnecting TikTok:", e);
+        setIsTiktokConnected(false);
+        showNotification("info", "tiktok", "TikTok Terputus", "Koneksi dihentikan.");
+      });
   };
 
   // Facebook connection simulator triggers
