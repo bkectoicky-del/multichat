@@ -7,6 +7,21 @@ interface SourcePlatformCardProps {
   activeYoutubeVideoId: string | null;
   onStartYoutubePoll: (videoId: string) => void;
   onStopYoutubePoll: () => void;
+  
+  tiktokUsername: string;
+  setTiktokUsername: (val: string) => void;
+  isTiktokConnected: boolean;
+  isTiktokConnecting: boolean;
+  onConnectTiktok: () => void;
+  onDisconnectTiktok: () => void;
+
+  facebookPageId: string;
+  setFacebookPageId: (val: string) => void;
+  isFacebookConnected: boolean;
+  isFacebookConnecting: boolean;
+  onConnectFacebook: () => void;
+  onDisconnectFacebook: () => void;
+
   onSimulateMessage: (author: string, message: string, platform: "tiktok" | "youtube" | "facebook" | "simulation") => void;
 }
 
@@ -15,11 +30,24 @@ export default function SourcePlatformCard({
   activeYoutubeVideoId,
   onStartYoutubePoll,
   onStopYoutubePoll,
+  
+  tiktokUsername,
+  setTiktokUsername,
+  isTiktokConnected,
+  isTiktokConnecting,
+  onConnectTiktok,
+  onDisconnectTiktok,
+
+  facebookPageId,
+  setFacebookPageId,
+  isFacebookConnected,
+  isFacebookConnecting,
+  onConnectFacebook,
+  onDisconnectFacebook,
+
   onSimulateMessage,
 }: SourcePlatformCardProps) {
   const [ytInput, setYtInput] = useState("");
-  const [tiktokUsername, setTiktokUsername] = useState("@streaming_pro");
-  const [facebookPageId, setFacebookPageId] = useState("page_live_12");
   
   // Simulation states
   const [simName, setSimName] = useState("Siska");
@@ -73,77 +101,157 @@ export default function SourcePlatformCard({
       </div>
 
       <div className="space-y-4">
-        {/* TikTok input field */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">TikTok Username</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-pink-500 font-bold font-mono text-xs">T</span>
-            </div>
+        {/* TikTok Platform Card Block */}
+        <div className="space-y-4 p-4 bg-slate-950/40 rounded-xl border border-slate-800">
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-5 h-5 bg-pink-500/10 rounded flex items-center justify-center text-pink-500 font-bold font-mono text-xs animate-pulse">T</span>
+              TikTok Live Chat
+            </label>
+            {isTiktokConnected ? (
+              <span className="text-[9.5px] font-bold text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_6px_#10b981]"></span>
+                Connected
+              </span>
+            ) : isTiktokConnecting ? (
+              <span className="text-[9.5px] font-bold text-pink-400 flex items-center gap-1.5 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
+                Connecting...
+              </span>
+            ) : (
+              <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-950 border border-slate-850 px-2 py-0.5 rounded-full uppercase tracking-widest">Offline</span>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">TikTok Username</label>
             <input
               type="text"
               placeholder="@username"
               value={tiktokUsername}
               onChange={(e) => setTiktokUsername(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-8 pr-4 text-xs font-medium text-slate-200 focus:outline-none focus:border-pink-500/50 transition-colors"
+              disabled={isTiktokConnected || isTiktokConnecting}
+              className="w-full bg-slate-950 border border-slate-800 disabled:opacity-60 rounded-xl py-2 px-3 text-xs font-medium text-slate-200 focus:outline-none focus:border-pink-500/50 transition-colors"
             />
           </div>
-        </div>
-
-        {/* YouTube Input field & Control trigger */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">YouTube Live ID</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-red-500 font-bold font-mono text-xs">Y</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Video ID or watch URL"
-              value={ytInput}
-              onChange={(e) => setYtInput(e.target.value)}
-              disabled={!!activeYoutubeVideoId}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-8 pr-4 text-xs font-medium text-slate-200 focus:outline-none focus:border-red-500/50 transition-colors"
-            />
-          </div>
-          {/* Active status or Action Trigger for YouTube poller */}
-          <div className="mt-1">
-            {!activeYoutubeVideoId ? (
+          <div>
+            {isTiktokConnected ? (
               <button
                 type="button"
-                onClick={handleYtSubmit}
-                className="w-full py-1.5 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white transition duration-150 rounded-lg text-[10px] font-semibold border border-red-500/20"
+                onClick={onDisconnectTiktok}
+                className="w-full py-2 bg-pink-950/20 hover:bg-pink-950/40 text-pink-400 font-bold tracking-wide rounded-lg text-xs uppercase border border-pink-900/30 transition duration-150 cursor-pointer"
               >
-                Start Automated Server Polling
+                Disconnect From TikTok
               </button>
             ) : (
-              <div className="flex items-center gap-2 justify-between bg-red-950/20 p-2 rounded-lg border border-red-900/30">
-                <span className="text-[10px] text-red-300 font-medium truncate">Active Video: {activeYoutubeVideoId}</span>
-                <button
-                  onClick={onStopYoutubePoll}
-                  className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded text-[9px] uppercase"
-                >
-                  Stop
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onConnectTiktok}
+                disabled={isTiktokConnecting}
+                className="w-full py-2 bg-pink-600 hover:bg-pink-550 disabled:opacity-50 text-white font-bold tracking-wide rounded-lg text-xs uppercase shadow-lg shadow-pink-500/10 transition duration-150 cursor-pointer"
+              >
+                {isTiktokConnecting ? "Connecting to TikTok..." : "Start Connection"}
+              </button>
             )}
           </div>
         </div>
 
-        {/* Facebook input field */}
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Facebook Page ID</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-blue-500 font-bold font-mono text-xs">F</span>
-            </div>
+        {/* YouTube Platform Card Block */}
+        <div className="space-y-4 p-4 bg-slate-950/40 rounded-xl border border-slate-800">
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-5 h-5 bg-red-500/10 rounded flex items-center justify-center text-red-500 font-bold font-mono text-xs animate-pulse">Y</span>
+              YouTube Live Chat
+            </label>
+            {!!activeYoutubeVideoId ? (
+              <span className="text-[9.5px] font-bold text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_6px_#10b981]"></span>
+                Live Polling
+              </span>
+            ) : (
+              <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-950 border border-slate-850 px-2 py-0.5 rounded-full uppercase tracking-widest">Offline</span>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">YouTube Live ID or URL</label>
+            <input
+              type="text"
+              placeholder="v=Video ID or Watch URL"
+              value={ytInput}
+              onChange={(e) => setYtInput(e.target.value)}
+              disabled={!!activeYoutubeVideoId}
+              className="w-full bg-slate-950 border border-slate-800 disabled:opacity-60 rounded-xl py-2 px-3 text-xs font-medium text-slate-200 focus:outline-none focus:border-red-500/50 transition-colors"
+            />
+          </div>
+          <div>
+            {!!activeYoutubeVideoId ? (
+              <button
+                type="button"
+                onClick={onStopYoutubePoll}
+                className="w-full py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 font-bold tracking-wide rounded-lg text-xs uppercase border border-red-900/30 transition duration-150 cursor-pointer"
+              >
+                Disconnect From YouTube
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleYtSubmit}
+                className="w-full py-2 bg-red-650 hover:bg-red-500 text-white font-bold tracking-wide rounded-lg text-xs uppercase shadow-lg shadow-red-500/10 transition duration-150 cursor-pointer"
+              >
+                Start Connection (Auto Poll)
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Facebook Platform Card Block */}
+        <div className="space-y-4 p-4 bg-slate-950/40 rounded-xl border border-slate-800">
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="w-5 h-5 bg-blue-500/10 rounded flex items-center justify-center text-blue-500 font-bold font-mono text-xs animate-pulse">F</span>
+              Facebook Live Chat
+            </label>
+            {isFacebookConnected ? (
+              <span className="text-[9.5px] font-bold text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_6px_#10b981]"></span>
+                Connected
+              </span>
+            ) : isFacebookConnecting ? (
+              <span className="text-[9.5px] font-bold text-blue-400 flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
+                Connecting...
+              </span>
+            ) : (
+              <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-950 border border-slate-850 px-2 py-0.5 rounded-full uppercase tracking-widest">Offline</span>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Facebook Page ID</label>
             <input
               type="text"
               placeholder="Page ID"
               value={facebookPageId}
               onChange={(e) => setFacebookPageId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-8 pr-4 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500/50 transition-colors"
+              disabled={isFacebookConnected || isFacebookConnecting}
+              className="w-full bg-slate-950 border border-slate-800 disabled:opacity-60 rounded-xl py-2 px-3 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500/50 transition-colors"
             />
+          </div>
+          <div>
+            {isFacebookConnected ? (
+              <button
+                type="button"
+                onClick={onDisconnectFacebook}
+                className="w-full py-2 bg-blue-950/20 hover:bg-blue-950/40 text-blue-450 font-bold tracking-wide rounded-lg text-xs uppercase border border-blue-900/30 transition duration-150 cursor-pointer"
+              >
+                Disconnect From Facebook
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onConnectFacebook}
+                disabled={isFacebookConnecting}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold tracking-wide rounded-lg text-xs uppercase shadow-lg shadow-blue-500/10 transition duration-150 cursor-pointer"
+              >
+                {isFacebookConnecting ? "Connecting to Facebook..." : "Start Connection"}
+              </button>
+            )}
           </div>
         </div>
       </div>

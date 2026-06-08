@@ -21,6 +21,44 @@ export default function App() {
   // Dynamic hosted application URL
   const [appUrl, setAppUrl] = useState("http://localhost:3000");
 
+  // Custom Toast Notifications
+  interface NotificationToast {
+    id: string;
+    type: "success" | "info" | "error";
+    platform: "tiktok" | "youtube" | "facebook" | "system";
+    title: string;
+    message: string;
+  }
+  const [toasts, setToasts] = useState<NotificationToast[]>([]);
+
+  const showNotification = (
+    type: "success" | "info" | "error",
+    platform: "tiktok" | "youtube" | "facebook" | "system",
+    title: string,
+    message: string
+  ) => {
+    const newToast: NotificationToast = {
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      platform,
+      title,
+      message,
+    };
+    setToasts((prev) => [...prev, newToast]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
+    }, 5000);
+  };
+
+  // Platform connection states
+  const [tiktokUsername, setTiktokUsername] = useState("@streaming_pro");
+  const [isTiktokConnected, setIsTiktokConnected] = useState(false);
+  const [isTiktokConnecting, setIsTiktokConnecting] = useState(false);
+
+  const [facebookPageId, setFacebookPageId] = useState("page_live_12");
+  const [isFacebookConnected, setIsFacebookConnected] = useState(false);
+  const [isFacebookConnecting, setIsFacebookConnecting] = useState(false);
+
   const [settings, setSettings] = useState<SpeechSettings>({
     voiceURI: "",
     rate: 1.0,
@@ -237,6 +275,7 @@ export default function App() {
 
   // Start polling YouTube
   const handleStartYoutubePoll = (videoId: string) => {
+    showNotification("info", "youtube", "Menghubungkan YouTube", "Memulai polling server untuk YouTube Live Chat...");
     fetch("/api/chat/youtube/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -246,9 +285,25 @@ export default function App() {
       .then((data) => {
         if (data.success) {
           setActiveYoutubeVideoId(data.activeVideoId);
+          showNotification(
+            "success",
+            "youtube",
+            "YouTube Terhubung",
+            `Berhasil terhubung ke YouTube Video ID: ${data.activeVideoId}!`
+          );
+          handleSimulateMessage(
+            "Sistem",
+            `[KONEKSI AKTIF] Mulai memantau YouTube Live Chat Video ID: ${data.activeVideoId}`,
+            "youtube"
+          );
+        } else {
+          showNotification("error", "youtube", "Koneksi Gagal", "Gagal memproses YouTube Video ID.");
         }
       })
-      .catch((e) => console.error("Error starting YouTube poller:", e));
+      .catch((e) => {
+        console.error("Error starting YouTube poller:", e);
+        showNotification("error", "youtube", "Koneksi Gagal", "Terjadi kesalahan jaringan.");
+      });
   };
 
   // Stop polling YouTube
@@ -258,9 +313,68 @@ export default function App() {
       .then((data) => {
         if (data.success) {
           setActiveYoutubeVideoId(null);
+          showNotification("info", "youtube", "YouTube Terputus", "Polling live chat YouTube dihentikan.");
         }
       })
       .catch((e) => console.error("Error stopping YouTube poller:", e));
+  };
+
+  // TikTok connection simulator triggers
+  const handleConnectTiktok = () => {
+    if (!tiktokUsername.trim()) {
+      showNotification("error", "tiktok", "Gagal Menghubungkan", "Masukkan username TikTok terlebih dahulu!");
+      return;
+    }
+    setIsTiktokConnecting(true);
+    setTimeout(() => {
+      setIsTiktokConnecting(false);
+      setIsTiktokConnected(true);
+      showNotification(
+        "success",
+        "tiktok",
+        "TikTok Terhubung",
+        `Berhasil terhubung ke siaran live ${tiktokUsername}!`
+      );
+      handleSimulateMessage(
+        "Sistem",
+        `[KONEKSI AKTIF] Terhubung ke siaran TikTok ${tiktokUsername}. Memulai monitoring live chat...`,
+        "tiktok"
+      );
+    }, 1000);
+  };
+
+  const handleDisconnectTiktok = () => {
+    setIsTiktokConnected(false);
+    showNotification("info", "tiktok", "TikTok Terputus", "Koneksi ke TikTok live chat dihentikan.");
+  };
+
+  // Facebook connection simulator triggers
+  const handleConnectFacebook = () => {
+    if (!facebookPageId.trim()) {
+      showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan Page ID Facebook terlebih dahulu!");
+      return;
+    }
+    setIsFacebookConnecting(true);
+    setTimeout(() => {
+      setIsFacebookConnecting(false);
+      setIsFacebookConnected(true);
+      showNotification(
+        "success",
+        "facebook",
+        "Facebook Terhubung",
+        `Berhasil terhubung ke Facebook Live Page ID: ${facebookPageId}!`
+      );
+      handleSimulateMessage(
+        "Sistem",
+        `[KONEKSI AKTIF] Terhubung ke Facebook Live Page [ID: ${facebookPageId}]. Memulai monitoring live chat...`,
+        "facebook"
+      );
+    }, 1000);
+  };
+
+  const handleDisconnectFacebook = () => {
+    setIsFacebookConnected(false);
+    showNotification("info", "facebook", "Facebook Terputus", "Koneksi ke Facebook live chat dihentikan.");
   };
 
   // Simulate comment injection
@@ -275,6 +389,50 @@ export default function App() {
       body: JSON.stringify({ author, message, platform }),
     }).catch((e) => console.error("Error triggering simulation chat message", e));
   };
+
+  // Automated simulation traffic generator when connected to active streams
+  useEffect(() => {
+    if (isOverlayRoute) return;
+
+    const interval = setInterval(() => {
+      const activePlatforms: ("tiktok" | "facebook" | "youtube")[] = [];
+      if (isTiktokConnected) activePlatforms.push("tiktok");
+      if (isFacebookConnected) activePlatforms.push("facebook");
+      if (activeYoutubeVideoId) activePlatforms.push("youtube");
+
+      if (activePlatforms.length === 0) return;
+
+      const pForm = activePlatforms[Math.floor(Math.random() * activePlatforms.length)];
+
+      const names = [
+        "Budi Santoso", "Siti Aminah", "Rian Hidayat", "Andi Wijaya", "Dewi Lestari", 
+        "Adi Saputra", "Rizky Pratama", "Lilis", "Eko Prasetyo", "Mega", "Dian", 
+        "Hendra", "Ahmad", "Sari", "Genta", "Kevin", "Intan", "Yudi", "Rina", "Agus"
+      ];
+      const messages = [
+        "Keren banget bang! Semangat terus streamingnya",
+        "Sapa aku dong kakak ganteng/cantik",
+        "Request lagu dong!",
+        "Hadir menonton dari Bandung kakak",
+        "Suaranya jernih banget nih",
+        "Mantap kali penjelasannya bang",
+        "Koneksinya lancar jaya ya",
+        "Wah, TTS-nya responsif beneran!",
+        "Bisa dibaca ga ya chatku ini?",
+        "Halo bang, salam kenal dari Surabaya",
+        "Kembangkan terus aplikasinya",
+        "Nice stream!",
+        "Spam lope lope dulu guys ❤️❤️"
+      ];
+
+      const randomName = names[Math.floor(Math.random() * names.length)];
+      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+
+      handleSimulateMessage(randomName, randomMsg, pForm);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isTiktokConnected, isFacebookConnected, activeYoutubeVideoId, isOverlayRoute]);
 
   // Clear Chat History Logs
   const handleClearHistory = () => {
@@ -336,6 +494,21 @@ export default function App() {
               activeYoutubeVideoId={activeYoutubeVideoId}
               onStartYoutubePoll={handleStartYoutubePoll}
               onStopYoutubePoll={handleStopYoutubePoll}
+
+              tiktokUsername={tiktokUsername}
+              setTiktokUsername={setTiktokUsername}
+              isTiktokConnected={isTiktokConnected}
+              isTiktokConnecting={isTiktokConnecting}
+              onConnectTiktok={handleConnectTiktok}
+              onDisconnectTiktok={handleDisconnectTiktok}
+
+              facebookPageId={facebookPageId}
+              setFacebookPageId={setFacebookPageId}
+              isFacebookConnected={isFacebookConnected}
+              isFacebookConnecting={isFacebookConnecting}
+              onConnectFacebook={handleConnectFacebook}
+              onDisconnectFacebook={handleDisconnectFacebook}
+
               onSimulateMessage={handleSimulateMessage}
             />
           </div>
@@ -367,6 +540,56 @@ export default function App() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Floating high-density Toast Notification Panel */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => {
+          let bgColor = "bg-slate-900 border-slate-800";
+          let iconColor = "text-indigo-400";
+          let platformBadge = "";
+          if (toast.platform === "tiktok") {
+            platformBadge = "🎵 TikTok";
+          } else if (toast.platform === "facebook") {
+            platformBadge = "👥 Facebook";
+          } else if (toast.platform === "youtube") {
+            platformBadge = "📽️ YouTube";
+          } else {
+            platformBadge = "⚙️ Sistem";
+          }
+
+          if (toast.type === "success") {
+            bgColor = "bg-slate-900/95 border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]";
+            iconColor = "text-emerald-400";
+          } else if (toast.type === "error") {
+            bgColor = "bg-slate-900/95 border-pink-500/30 shadow-[0_0_15px_rgba(236,72,153,0.15)]";
+            iconColor = "text-pink-500";
+          } else if (toast.type === "info") {
+            bgColor = "bg-slate-900/95 border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)]";
+            iconColor = "text-blue-400";
+          }
+
+          return (
+            <div
+              key={toast.id}
+              className={`p-4 rounded-xl border flex gap-3 pointer-events-auto shadow-2xl transition duration-300 ${bgColor}`}
+            >
+              <div className="flex-grow">
+                <div className="flex items-center gap-1.5 justify-between">
+                  <h4 className={`text-xs font-bold leading-none ${iconColor}`}>{toast.title}</h4>
+                  <span className="text-[9px] bg-slate-800/85 text-slate-400 px-1.5 py-0.5 rounded font-mono uppercase tracking-widest">{platformBadge}</span>
+                </div>
+                <p className="text-[11px] text-slate-350 mt-1.5 leading-relaxed">{toast.message}</p>
+              </div>
+              <button
+                onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+                className="text-slate-500 hover:text-slate-300 transition text-sm font-bold ml-1 self-start pointer-events-auto cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
