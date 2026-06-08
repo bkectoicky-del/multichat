@@ -130,6 +130,8 @@ function startYoutubePolling(videoId: string) {
       chatHistory.push(m);
       if (chatHistory.length > historyLimit) chatHistory.shift();
     });
+  }).catch((err) => {
+    console.error("[YouTube Immediate Poll Error]", err);
   });
 
   // Poll every 4 seconds
@@ -225,6 +227,11 @@ app.post("/api/chat/tiktok/connect", async (req, res) => {
       enableExtendedGiftInfo: true
     });
 
+    // CRITICAL: Register safety 'error' event to prevent uncaught exceptions from killing the Node process!
+    conn.on("error", (err: any) => {
+      console.error("[TikTok Connection Safe Listener Exception]", err?.message || err);
+    });
+
     const state = await conn.connect();
 
     conn.on("chat", (data: any) => {
@@ -275,9 +282,19 @@ app.post("/api/chat/tiktok/connect", async (req, res) => {
     res.json({ success: true, username: cleanUsername, roomId: state.roomId });
   } catch (err: any) {
     console.error(`[TikTok] Gagal menghubungkan ke ${cleanUsername}:`, err);
+    
+    let userFriendlyError = "Gagal menghubungkan. Akun sedang offline atau nama pengguna salah.";
+    const rawError = (err?.message || "").toLowerCase();
+    
+    if (rawError.includes("sigi_state") || rawError.includes("block") || rawError.includes("euler") || rawError.includes("permission")) {
+      userFriendlyError = "Server IP diblokir oleh sistem anti-bot TikTok. Silakan hubungkan menggunakan 'Kanal Linker Browser Script' (Copy Script di kanan bawah dan paste ke F12 Console) agar chat terbaca 100% lancar melalui browser Anda!";
+    } else if (rawError.includes("not_found") || rawError.includes("user_not_found")) {
+      userFriendlyError = "Username TikTok tidak ditemukan. Pastikan ejaan benar (tanpa tanda '@' di depan)!";
+    }
+
     res.json({ 
       success: false, 
-      error: err.message || "Gagal menghubungkan. Akun sedang offline atau nama pengguna salah." 
+      error: userFriendlyError
     });
   }
 });
