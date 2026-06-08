@@ -10,20 +10,23 @@ interface LiveChatFeedCardProps {
 export default function LiveChatFeedCard({ chatHistory, onPlaySingleSpeech }: LiveChatFeedCardProps) {
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Take only the last 30 messages to avoid cluttering the DOM, but keep them scrollable
+  const displayedChats = chatHistory.slice(-30);
+
   // Scroll to bottom dynamically as real-time messages arrive
   useEffect(() => {
     if (feedEndRef.current) {
       feedEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [chatHistory]);
+  }, [displayedChats]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden h-[600px]">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl flex flex-col shadow-xl overflow-hidden h-[500px]">
       {/* Header Bar */}
       <div className="p-4 px-5 border-b border-slate-850 bg-slate-900/60 flex items-center justify-between">
         <span className="text-slate-200 font-bold text-sm flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-indigo-400" />
-          Live Chat Feed
+          Live Chat Feed (30 Terakhir)
         </span>
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -34,21 +37,21 @@ export default function LiveChatFeedCard({ chatHistory, onPlaySingleSpeech }: Li
       </div>
 
       {/* Main chat window feed */}
-      <div className="p-5 flex-grow overflow-y-auto bg-slate-950/20 font-sans space-y-3 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-        {chatHistory.length === 0 ? (
+      <div className="p-4 flex-grow overflow-y-auto bg-slate-950/20 font-sans space-y-2.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+        {displayedChats.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
             <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl text-slate-400 shadow-md">
               <Bot className="w-10 h-10 text-indigo-400 mx-auto animate-pulse" />
             </div>
             <div>
-              <p className="text-slate-350 font-bold text-sm">Waiting for incoming comments...</p>
+              <p className="text-slate-350 font-bold text-sm">Menunggu komentar masuk...</p>
               <p className="text-slate-500 text-xs max-w-xs mx-auto leading-relaxed">
-                Platform connections are ready. Run your scraper code or send a mock comment using the simulator.
+                Kanal konektor telah aktif. Jalankan script browser atau gunakan simulator pesan untuk pengujian.
               </p>
             </div>
           </div>
         ) : (
-          chatHistory.map((msg) => {
+          displayedChats.map((msg) => {
             let platformBadgeColor = "bg-slate-800 text-slate-300";
             let platformLabel = "💬 Info";
             let authorColor = "text-indigo-400";
