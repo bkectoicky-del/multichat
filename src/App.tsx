@@ -233,8 +233,17 @@ export default function App() {
       setCurrentlySpokenText(nextMsg.message);
 
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.lang = "id-ID";
+
       const voices = window.speechSynthesis.getVoices();
-      const selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      let selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      if (!selectedVoice) {
+        // Fallback: Cari suara asli Bahasa Indonesia (id-ID) terbaik dari browser
+        selectedVoice = voices.find((v) => {
+          const l = v.lang.toLowerCase().replace("_", "-");
+          return l === "id-id" || l === "id" || l.startsWith("id-");
+        });
+      }
       
       if (selectedVoice) {
         utterance.voice = selectedVoice;
@@ -331,8 +340,17 @@ export default function App() {
       
       const textToSpeak = formatSpeechText(msg, settings) || `${msg.author} berkata ${msg.message}`;
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.lang = "id-ID";
+
       const voices = window.speechSynthesis.getVoices();
-      const selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      let selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      if (!selectedVoice) {
+        // Fallback: Cari suara asli Bahasa Indonesia (id-ID) terbaik dari browser
+        selectedVoice = voices.find((v) => {
+          const l = v.lang.toLowerCase().replace("_", "-");
+          return l === "id-id" || l === "id" || l.startsWith("id-");
+        });
+      }
       
       if (selectedVoice) {
         utterance.voice = selectedVoice;

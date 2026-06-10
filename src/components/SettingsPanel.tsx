@@ -52,7 +52,17 @@ export function VoiceSettingsCard({ settings, onChangeSettings }: VoiceSettingsC
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(testText);
-      const selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      utterance.lang = "id-ID";
+      
+      let selectedVoice = voices.find((v) => v.voiceURI === settings.voiceURI);
+      if (!selectedVoice) {
+        // Fallback: Cari suara asli Bahasa Indonesia (id-ID) terbaik dari browser
+        selectedVoice = voices.find((v) => {
+          const l = v.lang.toLowerCase().replace("_", "-");
+          return l === "id-id" || l === "id" || l.startsWith("id-");
+        });
+      }
+      
       if (selectedVoice) {
         utterance.voice = selectedVoice;
       }
