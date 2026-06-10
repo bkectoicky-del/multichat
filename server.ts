@@ -3,6 +3,10 @@ import path from "path";
 import dns from "dns";
 import { createServer as createViteServer } from "vite";
 import { WebcastPushConnection } from "tiktok-live-connector";
+import { LiveChat } from "youtube-chat";
+
+import dotenv from "dotenv";
+dotenv.config();
 
 // Force Node to resolve DNS to IPv4 first (helps with proxy stability)
 dns.setDefaultResultOrder("ipv4first");
@@ -30,83 +34,32 @@ interface SSEClient {
 }
 let sseClients: SSEClient[] = [];
 
-// YouTube Polling variables
+// YouTube live connection variables
 let activeYoutubeVideoId: string | null = null;
+let youtubeConnection: LiveChat | null = null;
 let youtubePollInterval: NodeJS.Timeout | null = null;
-let youtubeFallbackInterval: NodeJS.Timeout | null = null;
+
+// YouTube Google API state variables
+let youtubeLiveChatId: string | null = null;
+let lastVideoIdForChatIdLookUp: string | null = null;
+let youtubeNextPageToken: string | null = null;
+let youtubeApiKey: string | null = process.env.YOUTUBE_API_KEY || null;
+let youtubeAccessToken: string | null = null;
+let youtubeRefreshToken: string | null = null;
+let youtubeOauthClientId: string | null = process.env.GOOGLE_CLIENT_ID || null;
+let youtubeOauthClientSecret: string | null = process.env.GOOGLE_CLIENT_SECRET || null;
+let youtubeUserInfo: { name: string; email: string; avatar: string } | null = null;
+
+// Message de-duplication caches
 const seenYoutubeIds = new Set<string>();
+const recentContentKeys = new Set<string>();
 
 // TikTok live webcast variables
 let activeTiktokUsername: string | null = null;
 let tiktokConnection: any = null;
-let tiktokFallbackInterval: NodeJS.Timeout | null = null;
 
 // Facebook live variables
 let activeFacebookPageId: string | null = null;
-let facebookFallbackInterval: NodeJS.Timeout | null = null;
-
-const INDONESIAN_CHAT_POOL = {
-  tiktok: {
-    names: ["Rian_Ganz", "Siti99", "Budi_Gamer", "Anisa_imut", "Putra_Sulung", "Dewi_Lestari", "Rizky_Pratama", "Lilis_Handayani", "Eko_Prasetyo", "Mega_W", "Dian_Kusuma", "Hendra_Gunawan", "Ahmad_Fauzi", "Sari_Indah", "Kevin_Aditya", "Intan_Permata", "Yudi_Sudrajat", "Rina_Marlina", "Agus_Susanto", "Yanto_Bakso"],
-    messages: [
-      "absen dulu bang! 🔥",
-      "semangat terus kak live nya!",
-      "spill dong kak yang di belakang",
-      "tap tap layar guys, bantu share juga!",
-      "follback dong kak, udah follow nih",
-      "baca chatku dong plissss",
-      "ramein roomnya guys!",
-      "koneksinya lancar banget ya di sini",
-      "TTS nya canggih beneran dah",
-      "halo kak salam dari Medan",
-      "suaranya jernih banget kak, mantap",
-      "ada produk baru gak kak hari ini?",
-      "spade mawar dong guys",
-      "keren kak, sukses selalu!",
-      "minta reaksinya dong bang",
-      "makasih infonya kak, sangat membantu",
-    ],
-    gifts: [
-      "Mawar", "Kopi", "Nasi Goreng", "Mahkota", "Pesawat", "TikTok", "Jantung"
-    ]
-  },
-  youtube: {
-    names: ["Budi Santoso", "Andi Wijaya", "Rian Hidayat", "Susanti", "Hendra Wijaya", "Yanto Gaming", "Indah Puspita", "Agung Prasetyo", "Dedi Setiawan", "Rina Lestari", "Eka Saputra", "Ahmad Fauzi", "Sari Indah", "Genta Pratama", "Kevin Aditya", "Intan Permata", "Yudi Sudrajat", "Rina Marlina", "Agus Susanto", "Yanto Bakso"],
-    messages: [
-      "Halo bang, hadir menyimak livestramnya! 👍",
-      "First comment!",
-      "Request mabar bang nanti malam",
-      "Game ini seru banget sih",
-      "Bang, rahasia jago mainnya apa?",
-      "Suara mikrofonnya agak kekecilan gaa sih?",
-      "Setuju banget sama penjelasannya bang",
-      "Keren videonya, jangan lupa subscribe ya kawan-kawan",
-      "Salam kenal bang dari Surabaya lurd",
-      "Spam emot dulu guys biar rame 🚀🚀🔥",
-      "Mantap kontennya bermanfaat sekali",
-      "Overlay screen nya bagus banget bang, rapi",
-      "Bisa dibaca gak ya chat saya ini?",
-      "Semoga sehat selalu bang sekeluarga",
-    ]
-  },
-  facebook: {
-    names: ["Andi Wijaya", "Dewi Lestari", "Adi Saputra", "Rizky Pratama", "Lilis Handayani", "Eko Prasetyo", "Mega Wati", "Dian Kusuma", "Hendra Gunawan", "Ahmad Fauzi", "Sari Indah", "Genta Pratama", "Kevin Aditya", "Intan Permata", "Yudi Sudrajat", "Rina Marlina", "Agus Susanto", "Yanto Bakso"],
-    messages: [
-      "Hadir menyimak bun, up bantu up",
-      "Semoga lancar jaya usahanya gan!",
-      "Bantu share ke grup sebelah lurd",
-      "Spill harganya om di inbox",
-      "Lokasi pengirimannya dari mana ini ya?",
-      "Mantap kali penjelasannya, sangat jelas",
-      "Bagus banget, rekomendasi pokoknya",
-      "Info mabar dulur-dulur",
-      "Semangat kawan, sukses mendulang cuan",
-      "Saya sudah share ya, moga makin laris",
-      "Wah, baru tau ada fitur tts live chat gini",
-      "Bisa kirim bayar di tempat (COD) ga om?",
-    ]
-  }
-};
 
 // Broadcast helper
 function broadcastMessage(msg: ChatMessage) {
@@ -116,59 +69,140 @@ function broadcastMessage(msg: ChatMessage) {
   });
 }
 
-// Fetch and parse YouTube live chat page (scrape-less method)
-async function fetchYoutubeChat(videoId: string): Promise<ChatMessage[]> {
+// Unified, secure chat/comment ingestion and broadcast pipeline
+function insertChatMessage(msg: ChatMessage) {
+  // 1. Check ID uniqueness for strict de-duplication
+  if (msg.id) {
+    if (seenYoutubeIds.has(msg.id)) return;
+    seenYoutubeIds.add(msg.id);
+  }
+
+  // 2. Prevent identical spam or frequent scrapes by content matching
+  const contentKey = `${msg.platform}::${msg.author.toLowerCase()}::${msg.message.toLowerCase()}`;
+  if (recentContentKeys.has(contentKey)) return;
+  recentContentKeys.add(contentKey);
+  setTimeout(() => recentContentKeys.delete(contentKey), 15000); // 15s debounce window
+
+  // 3. Append to historical registry
+  chatHistory.push(msg);
+  if (chatHistory.length > historyLimit) {
+    chatHistory.shift();
+  }
+
+  // 4. Trigger SSE delivery to frontends
+  broadcastMessage(msg);
+}
+
+// High-fidelity brace counting parser to extract window['ytInitialData'] from HTML safely
+function extractYtInitialData(html: string): any {
+  const marker = "ytInitialData";
+  const markerIndex = html.indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  // Locate the first opening brace '{' after 'ytInitialData'
+  const start = html.indexOf("{", markerIndex);
+  if (start === -1) return null;
+
+  let braceCount = 0;
+  let inString = false;
+  let escape = false;
+  let end = start;
+
+  for (let i = start; i < html.length; i++) {
+    const char = html[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (char === "\\") {
+      escape = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (!inString) {
+      if (char === "{") {
+        braceCount++;
+      } else if (char === "}") {
+        braceCount--;
+        if (braceCount === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  const jsonStr = html.substring(start, end).trim();
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("[YouTube Scraper] Gagal parsing JSON via brace counting:", e);
+    return null;
+  }
+}
+
+// Scrape-less poll fallback using direct fetch and DOM/JSON element extraction
+async function fetchYoutubeChatFallback(videoId: string): Promise<ChatMessage[]> {
   try {
     const url = `https://www.youtube.com/live_chat?v=${videoId}`;
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.5",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
       },
     });
 
     if (!res.ok) {
-      throw new Error(`YouTube returned status ${res.status}`);
+      console.warn(`[YouTube Poll Fallback] Gagal mengambil halaman status: ${res.status}`);
+      return [];
     }
 
     const html = await res.text();
+    const parsed = extractYtInitialData(html);
+    if (!parsed) {
+      return [];
+    }
+
+    // Determine path of live items
+    const actions = parsed?.contents?.liveChatRenderer?.actions || 
+                    parsed?.continuationContents?.liveChatContinuation?.actions || [];
     
-    // Find window["ytInitialData"] or ytInitialData = 
-    const match = html.match(/ytInitialData\s*=\s*({.+?});\s*(?:window|var|<\/script)/) ||
-                  html.match(/ytInitialData\s*=\s*({.+?});?<\/script>/) ||
-                  html.match(/ytInitialData\s*=\s*(.+?);\s*<\/script>/);
-
-    if (!match) {
-      return [];
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(match[1]);
-    } catch (e) {
-      return [];
-    }
-
-    const actions = parsed?.contents?.liveChatRenderer?.actions || [];
     const messages: ChatMessage[] = [];
 
     for (const action of actions) {
       const addChatItemItem = action?.addChatItemAction?.item;
       if (!addChatItemItem) continue;
 
-      const textRenderer = addChatItemItem.liveChatTextMessageRenderer;
+      const textRenderer = addChatItemItem.liveChatTextMessageRenderer || 
+                           addChatItemItem.liveChatPaidMessageRenderer || 
+                           addChatItemItem.liveChatMembershipItemRenderer;
+                           
       if (textRenderer) {
-        const id = textRenderer.id;
-        const author = textRenderer.authorName?.simpleText || "User";
+        const id = textRenderer.id || `yt-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const author = textRenderer.authorName?.simpleText || "YouTube User";
         const avatar = textRenderer.authorPhoto?.thumbnails?.[0]?.url || "";
-        const message = textRenderer.message?.runs?.map((r: any) => r.text || "").join("") || "";
-        const timestamp = textRenderer.timestampUsec ? Math.floor(parseInt(textRenderer.timestampUsec) / 1000) : Date.now();
+        
+        let message = "";
+        if (textRenderer.message?.runs) {
+          message = textRenderer.message.runs.map((r: any) => r.text || "").join("");
+        } else if (textRenderer.headerPrimaryText?.simpleText) {
+          message = textRenderer.headerPrimaryText.simpleText;
+        }
+
+        const timestamp = textRenderer.timestampUsec 
+          ? Math.floor(parseInt(textRenderer.timestampUsec) / 1000) 
+          : Date.now();
 
         messages.push({
           id,
           platform: "youtube",
           author,
-          message,
+          message: message.trim(),
           timestamp,
           avatar,
         });
@@ -177,191 +211,277 @@ async function fetchYoutubeChat(videoId: string): Promise<ChatMessage[]> {
 
     return messages;
   } catch (error) {
-    console.error("[YouTube Scraper error]", error);
+    console.error("[YouTube Poll Fallback Error]", error);
     return [];
   }
 }
 
-// Start polling API with intelligent automatic fallback
+// Helper to retrieve live chat messages using YouTube Data API v3
+async function pollOfficialYoutubeLiveChat(
+  videoId: string,
+  apiKey: string | null,
+  accessToken: string | null
+): Promise<ChatMessage[]> {
+  try {
+    // 1. Get live chat ID if not already cached for this videoId
+    if (!youtubeLiveChatId || lastVideoIdForChatIdLookUp !== videoId) {
+      console.log(`[YouTube API] Looking up liveChatId for video: ${videoId}`);
+      let url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}`;
+      const headers: HeadersInit = {};
+      
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      } else if (apiKey) {
+        url += `&key=${apiKey}`;
+      } else {
+        throw new Error("No API Key or Access Token provided");
+      }
+
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Videos request failed: ${res.status} - ${errText}`);
+      }
+
+      const data = await res.json();
+      const videoItem = data?.items?.[0];
+      const liveChatId = videoItem?.liveStreamingDetails?.activeLiveChatId;
+      
+      if (!liveChatId) {
+        console.warn("[YouTube API] Video is not an active live stream or live chat is disabled.");
+        return [];
+      }
+
+      youtubeLiveChatId = liveChatId;
+      lastVideoIdForChatIdLookUp = videoId;
+      youtubeNextPageToken = null; // reset pagination token on new stream
+      console.log(`[YouTube API] Found active liveChatId: ${liveChatId}`);
+    }
+
+    // 2. Fetch live chat messages
+    let msgUrl = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${youtubeLiveChatId}&part=snippet,authorDetails&maxResults=200`;
+    const headers: HeadersInit = {};
+
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    } else if (apiKey) {
+      msgUrl += `&key=${apiKey}`;
+    }
+
+    if (youtubeNextPageToken) {
+      msgUrl += `&pageToken=${youtubeNextPageToken}`;
+    }
+
+    const msgRes = await fetch(msgUrl, { headers });
+    if (!msgRes.ok) {
+      const errText = await msgRes.text();
+      if (msgRes.status === 400 || msgRes.status === 404 || msgRes.status === 403) {
+        youtubeLiveChatId = null; // force lookup again next time
+      }
+      throw new Error(`LiveChat request failed: ${msgRes.status} - ${errText}`);
+    }
+
+    const msgData = await msgRes.json();
+    youtubeNextPageToken = msgData.nextPageToken || youtubeNextPageToken;
+
+    const items = msgData.items || [];
+    const messages: ChatMessage[] = [];
+
+    for (const item of items) {
+      const id = item.id || `yt-api-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      const author = item.authorDetails?.displayName || "YouTube User";
+      const message = item.snippet?.displayMessage || "";
+      const avatar = item.authorDetails?.profileImageUrl || "";
+      const timestamp = item.snippet?.publishedAt 
+        ? new Date(item.snippet.publishedAt).getTime() 
+        : Date.now();
+
+      messages.push({
+        id,
+        platform: "youtube",
+        author,
+        message: message.trim(),
+        timestamp,
+        avatar,
+      });
+    }
+
+    return messages;
+  } catch (error) {
+    console.error("[YouTube API Error]", error);
+    return [];
+  }
+}
+
+// Start YouTube LiveChat Connection
 function startYoutubePolling(videoId: string) {
-  if (youtubePollInterval) {
-    clearInterval(youtubePollInterval);
-  }
-  if (youtubeFallbackInterval) {
-    clearInterval(youtubeFallbackInterval);
-  }
+  // Disconnect any preceding connection active
+  stopYoutubePolling();
   
   activeYoutubeVideoId = videoId;
   seenYoutubeIds.clear();
-  console.log(`[YouTube] Started polling for videoId: ${videoId}`);
 
-  // Push immediate system connection message
-  setTimeout(() => {
-    const welcomeMsg: ChatMessage = {
-      id: `yt-system-${Date.now()}`,
-      platform: "youtube",
-      author: "Sistem",
-      message: `[KONEKSI AKTIF] Memantau YouTube Live Chat Video ID: ${videoId} (Auto Poller & Smart Proxy aktif)`,
-      timestamp: Date.now(),
-    };
-    chatHistory.push(welcomeMsg);
-    broadcastMessage(welcomeMsg);
-  }, 100);
+  const usingApiKey = !!youtubeApiKey;
+  const usingOAuth = !!youtubeAccessToken;
 
-  // Fetch real comments immediately
-  fetchYoutubeChat(videoId).then((msgs) => {
-    msgs.forEach((m) => {
-      seenYoutubeIds.add(m.id);
-      chatHistory.push(m);
-      if (chatHistory.length > historyLimit) chatHistory.shift();
-      broadcastMessage(m);
-    });
-  }).catch((err) => {
-    console.error("[YouTube Immediate Poll Error]", err);
-  });
-
-  // Poll real stream every 5 seconds
-  youtubePollInterval = setInterval(async () => {
-    if (!activeYoutubeVideoId) {
-      if (youtubePollInterval) clearInterval(youtubePollInterval);
-      return;
-    }
-    const msgs = await fetchYoutubeChat(activeYoutubeVideoId);
-    let newCount = 0;
+  if (usingOAuth) {
+    console.log(`[YouTube API] Memulai koneksi resmi via Google Akun Login untuk Video ID: ${videoId}`);
+    setTimeout(() => {
+      const systemMsg: ChatMessage = {
+        id: `yt-system-${Date.now()}`,
+        platform: "youtube",
+        author: "Sistem",
+        message: `[KONEKSI RESMI] Menghubungkan ke YouTube Live Chat via Google Login [Video ID: ${videoId}]. Memantau via API resmi...`,
+        timestamp: Date.now(),
+      };
+      insertChatMessage(systemMsg);
+    }, 100);
+  } else if (usingApiKey) {
+    console.log(`[YouTube API] Memulai koneksi resmi via API Key untuk Video ID: ${videoId}`);
+    setTimeout(() => {
+      const systemMsg: ChatMessage = {
+        id: `yt-system-${Date.now()}`,
+        platform: "youtube",
+        author: "Sistem",
+        message: `[KONEKSI RESMI] Menghubungkan ke YouTube Live Chat via API Key [Video ID: ${videoId}]. Memantau via API resmi...`,
+        timestamp: Date.now(),
+      };
+      insertChatMessage(systemMsg);
+    }, 100);
+  } else {
+    console.log(`[YouTube] Memulai koneksi ganda (Direct-Streaming & Fallback Poller) untuk Video ID: ${videoId}`);
     
+    // Push immediate system connection message
+    setTimeout(() => {
+      const welcomeMsg: ChatMessage = {
+        id: `yt-system-${Date.now()}`,
+        platform: "youtube",
+        author: "Sistem",
+        message: `[KONEKSI AKTIF] Menghubungkan langsung ke YouTube Live Chat [Video ID: ${videoId}]. Memulai stream & dual-engine failover feed...`,
+        timestamp: Date.now(),
+      };
+      insertChatMessage(welcomeMsg);
+    }, 100);
+
+    // Engine 1: Start native WebChat Connection
+    try {
+      const chat = new LiveChat({ liveId: videoId });
+
+      chat.on("start", (id) => {
+        console.log(`[YouTube] LiveChat terhubung via WebSockets.`);
+      });
+
+      chat.on("chat", (chatItem) => {
+        const id = chatItem.id || `yt-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const messageText = chatItem.message
+          .map((run: any) => run.text || "")
+          .join("")
+          .trim();
+
+        const authorName = chatItem.author.name || "YouTube User";
+        const avatarUrl = chatItem.author.thumbnail?.url || "";
+
+        insertChatMessage({
+          id,
+          platform: "youtube",
+          author: authorName,
+          message: messageText,
+          timestamp: chatItem.timestamp ? new Date(chatItem.timestamp).getTime() : Date.now(),
+          avatar: avatarUrl,
+        });
+      });
+
+      chat.on("error", (err) => {
+        console.error("[YouTube Client Engine 1 Error]", err);
+      });
+
+      chat.on("end", (reason) => {
+        console.log(`[YouTube] LiveChat WebSockets terputus. Alasan: ${reason}`);
+      });
+
+      chat.start().then((started) => {
+        if (started) {
+          youtubeConnection = chat;
+          console.log(`[YouTube Engine 1] Websocket parser aktif.`);
+        } else {
+          console.warn(`[YouTube Engine 1] Websocket parser gagal dimulai. Fallback poller mengamankan feed.`);
+        }
+      }).catch((err) => {
+        console.error(`[YouTube Engine 1] Handshake gagal, polling terus mengawal feed:`, err);
+      });
+
+    } catch (error) {
+      console.error("[YouTube connection error]", error);
+    }
+  }
+
+  // Polling Executor Loop (Engine 2 / API Engine)
+  async function triggerPoll() {
+    if (activeYoutubeVideoId !== videoId) return;
+    
+    let msgs: ChatMessage[] = [];
+    if (youtubeAccessToken || youtubeApiKey) {
+      msgs = await pollOfficialYoutubeLiveChat(videoId, youtubeApiKey, youtubeAccessToken);
+    } else {
+      msgs = await fetchYoutubeChatFallback(videoId);
+    }
+
+    let newCount = 0;
     msgs.forEach((m) => {
       if (!seenYoutubeIds.has(m.id)) {
-        seenYoutubeIds.add(m.id);
-        chatHistory.push(m);
-        if (chatHistory.length > historyLimit) chatHistory.shift();
-        broadcastMessage(m);
+        insertChatMessage(m);
         newCount++;
       }
     });
 
     if (newCount > 0) {
-      console.log(`[YouTube] Pulled ${newCount} new chat messages from YouTube stream.`);
+      const engineName = (youtubeAccessToken || youtubeApiKey) ? "API RESMI" : "Scraper Fallback";
+      console.log(`[YouTube ${engineName}] Memperoleh ${newCount} komentar baru via polling.`);
     }
-  }, 5000);
+  }
 
-  // High-fidelity dynamic fallback generator to always keep feed active
-  youtubeFallbackInterval = setInterval(() => {
-    if (activeYoutubeVideoId !== videoId) {
-      if (youtubeFallbackInterval) clearInterval(youtubeFallbackInterval);
-      return;
-    }
-
-    const { names, messages } = INDONESIAN_CHAT_POOL.youtube;
-    const isSuperChat = Math.random() < 0.12; // 12% probability
-    const author = names[Math.floor(Math.random() * names.length)];
-    const avatar = `https://api.dicebear.com/7.x/pixel-art/svg?seed=${author}`;
-    let msg: ChatMessage;
-
-    if (isSuperChat) {
-      const amount = [10000, 20000, 50000, 100000][Math.floor(Math.random() * 4)];
-      const formattedAmount = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(amount);
-      const superTexts = ["Semangat terus live-nya bang!", "Mabar yuk bareng penonton", "Keren banget bang asli!", "Salam kenal orang baik", "Senggol dong bang!"];
-      const superText = superTexts[Math.floor(Math.random() * superTexts.length)];
-      
-      msg = {
-        id: `yt-gen-sc-${Date.now()}`,
-        platform: "youtube",
-        author,
-        message: `mengirimkan Super Chat sebesar ${formattedAmount}! '${superText}'`,
-        timestamp: Date.now(),
-        avatar,
-      };
-    } else {
-      const text = messages[Math.floor(Math.random() * messages.length)];
-      msg = {
-        id: `yt-gen-${Date.now()}`,
-        platform: "youtube",
-        author,
-        message: text,
-        timestamp: Date.now(),
-        avatar,
-      };
-    }
-
-    chatHistory.push(msg);
-    if (chatHistory.length > historyLimit) chatHistory.shift();
-    broadcastMessage(msg);
-  }, 4000);
+  // Poll immediately, then schedule every 4.5 seconds to capture live comments
+  triggerPoll();
+  youtubePollInterval = setInterval(triggerPoll, 4500);
 }
 
-// Stop polling API
+// Stop YouTube Connection
 function stopYoutubePolling() {
+  if (youtubeConnection) {
+    try {
+      youtubeConnection.stop();
+    } catch (e) {
+      console.error("[YouTube] Gagal memutus koneksi websocket:", e);
+    }
+    youtubeConnection = null;
+  }
   if (youtubePollInterval) {
     clearInterval(youtubePollInterval);
     youtubePollInterval = null;
   }
-  if (youtubeFallbackInterval) {
-    clearInterval(youtubeFallbackInterval);
-    youtubeFallbackInterval = null;
-  }
+  const prevVideoId = activeYoutubeVideoId;
   activeYoutubeVideoId = null;
-  console.log("[YouTube] Stopped polling and smart proxies.");
+  if (prevVideoId) {
+    console.log(`[YouTube] LiveChat diputuskan dari Video ID: ${prevVideoId}`);
+  }
 }
 
 // Helper to spawn TikTok Smart Proxy
 function startTiktokSmartProxy(username: string) {
   activeTiktokUsername = username;
-  if (tiktokFallbackInterval) {
-    clearInterval(tiktokFallbackInterval);
-  }
 
-  // Push immediate system connection message
+  // Push immediate system connection message informing user why direct is limited and how to get real chat
   setTimeout(() => {
     const welcomeMsg: ChatMessage = {
       id: `tt-system-${Date.now()}`,
       platform: "tiktok",
       author: "Sistem",
-      message: `[KONEKSI AKTIF] Terhubung ke live stream TikTok @${username} (Smart Direct Mode). Memulai monitoring live chat...`,
+      message: `[KONEKSI AKTIF] Menghubungkan ke @${username}. Catatan: TikTok membatasi koneksi langsung dari server. Silakan tombol "Copy Script Linker" di bagian 'Kanal Linker / Browser Extension' di panel Sumber Platform, lalu tempelkan di Developer Console (F12) browser Anda yang sedang membuka TikTok Live untuk mengirimkan komentar NYATA Anda ke sini secara waktu nyata!`,
       timestamp: Date.now(),
     };
     chatHistory.push(welcomeMsg);
     broadcastMessage(welcomeMsg);
   }, 100);
-
-  // Dynamic message feed
-  tiktokFallbackInterval = setInterval(() => {
-    if (activeTiktokUsername !== username) {
-      if (tiktokFallbackInterval) clearInterval(tiktokFallbackInterval);
-      return;
-    }
-
-    const { names, messages, gifts } = INDONESIAN_CHAT_POOL.tiktok;
-    const isGift = Math.random() < 0.18; // 18% probability of gift action
-    const author = names[Math.floor(Math.random() * names.length)];
-    const avatar = `https://api.dicebear.com/7.x/adventurer/svg?seed=${author}`;
-    let msg: ChatMessage;
-
-    if (isGift) {
-      const giftName = gifts[Math.floor(Math.random() * gifts.length)];
-      msg = {
-        id: `tt-gen-gift-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        platform: "tiktok",
-        author,
-        message: `mengirimkan hadiah ${giftName}! Terima kasih!`,
-        timestamp: Date.now(),
-        avatar,
-      };
-    } else {
-      const text = messages[Math.floor(Math.random() * messages.length)];
-      msg = {
-        id: `tt-gen-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        platform: "tiktok",
-        author,
-        message: text,
-        timestamp: Date.now(),
-        avatar,
-      };
-    }
-
-    chatHistory.push(msg);
-    if (chatHistory.length > historyLimit) chatHistory.shift();
-    broadcastMessage(msg);
-  }, 3500);
 }
 
 // Middleware
@@ -382,7 +502,181 @@ app.get("/api/chat/history", (req, res) => {
   res.json({ history: chatHistory });
 });
 
+// YouTube API Configuration and OAuth routes
+app.get("/api/chat/youtube/config", (req, res) => {
+  res.json({
+    apiKey: youtubeApiKey,
+    hasOAuth: !!youtubeAccessToken,
+    userInfo: youtubeUserInfo,
+    clientId: youtubeOauthClientId,
+    clientSecret: youtubeOauthClientSecret ? "••••••••••••" : null,
+  });
+});
+
+app.post("/api/chat/youtube/config", (req, res) => {
+  const { apiKey, accessToken, oauthClientId, oauthClientSecret, userInfo, disconnect } = req.body;
+  if (disconnect) {
+    youtubeAccessToken = null;
+    youtubeRefreshToken = null;
+    youtubeUserInfo = null;
+    youtubeOauthClientId = null;
+    youtubeOauthClientSecret = null;
+    youtubeLiveChatId = null;
+    youtubeNextPageToken = null;
+    return res.json({ success: true, message: "Logged out from Google" });
+  }
+
+  if (apiKey !== undefined) {
+    youtubeApiKey = apiKey ? apiKey.trim() : null;
+  }
+  if (accessToken !== undefined) youtubeAccessToken = accessToken;
+  if (oauthClientId !== undefined) youtubeOauthClientId = oauthClientId;
+  if (oauthClientSecret !== undefined && oauthClientSecret !== "••••••••••••") {
+    youtubeOauthClientSecret = oauthClientSecret;
+  }
+  if (userInfo !== undefined) youtubeUserInfo = userInfo;
+
+  res.json({
+    success: true,
+    config: {
+      apiKey: youtubeApiKey,
+      hasOAuth: !!youtubeAccessToken,
+      userInfo: youtubeUserInfo,
+    }
+  });
+});
+
+app.get("/api/auth/google/url", (req, res) => {
+  const { clientId, clientSecret, appUrl } = req.query;
+  if (!clientId || !clientSecret || !appUrl) {
+    return res.status(400).json({ error: "Missing required query parameters clientId, clientSecret, or appUrl" });
+  }
+
+  // Save options to server memory
+  youtubeOauthClientId = clientId as string;
+  youtubeOauthClientSecret = clientSecret as string;
+
+  // Encode configurations in state
+  const stateData = {
+    clientId: clientId as string,
+    clientSecret: clientSecret as string,
+    appUrl: appUrl as string
+  };
+  const encodedState = Buffer.from(JSON.stringify(stateData)).toString("base64");
+
+  const redirectUri = `${appUrl}/auth/google/callback`;
+  const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId as string)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/youtube.readonly&access_type=offline&prompt=consent&state=${encodedState}`;
+
+  res.json({ url: googleAuthUrl });
+});
+
+app.get(["/auth/google/callback", "/auth/google/callback/"], async (req, res) => {
+  const { code, state } = req.query;
+  if (!code) {
+    return res.send("Missing code parameter");
+  }
+
+  try {
+    const decodedStateStr = Buffer.from(state as string, "base64").toString("utf-8");
+    const decodedState = JSON.parse(decodedStateStr);
+    const { clientId, clientSecret, appUrl } = decodedState;
+
+    // Exchange authorization code for access_token and refresh_token
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: code as string,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: `${appUrl}/auth/google/callback`,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.send(`Failed to exchange code: ${response.status} - ${errText}`);
+    }
+
+    const tokens = await response.json();
+    youtubeAccessToken = tokens.access_token;
+    if (tokens.refresh_token) {
+      youtubeRefreshToken = tokens.refresh_token;
+    }
+    youtubeOauthClientId = clientId;
+    youtubeOauthClientSecret = clientSecret;
+
+    // Get user profile info via oauth2 endpoint
+    let name = "Google User";
+    let email = "";
+    let avatar = "";
+
+    try {
+      const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { "Authorization": `Bearer ${tokens.access_token}` },
+      });
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        name = userData.name || name;
+        email = userData.email || email;
+        avatar = userData.picture || avatar;
+      }
+    } catch (profileErr) {
+      console.warn("Failed to retrieve user profile data:", profileErr);
+    }
+
+    youtubeUserInfo = { name, email, avatar };
+
+    res.send(`
+      <html>
+        <head>
+          <title>Google YouTube Authentication Success</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: sans-serif; background-color: #0b1329; color: #f8fafc; text-align: center; padding: 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 80vh;">
+          <div style="background-color: #0f172a; border: 1px solid #1e293b; padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-width: 450px;">
+            <div style="font-size: 50px; margin-bottom: 20px;">🎉</div>
+            <h2 style="color: #38bdf8; margin: 0 0 10px 0;">Google Login Berhasil!</h2>
+            <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">Akun Google Anda (${email}) berhasil terhubung khusus untuk monitoring YouTube Live Chat.</p>
+            <div style="margin: 20px 0; background-color: #020617; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #10b981;">
+              Koneksi Terverifikasi • Status: OK
+            </div>
+            <p style="color: #64748b; font-size: 12px;">Halaman ini akan ditutup secara otomatis dalam beberapa detik...</p>
+          </div>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({
+                type: 'GOOGLE_YOUTUBE_AUTH_SUCCESS',
+                tokens: ${JSON.stringify(tokens)},
+                userInfo: ${JSON.stringify(youtubeUserInfo)}
+              }, '*');
+              setTimeout(() => {
+                window.close();
+              }, 2000);
+            } else {
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 3000);
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (err: any) {
+    console.error("Callback handler failure:", err);
+    res.status(500).send(`Error processing callback: ${err?.message || err}`);
+  }
+});
+
 // Start YouTube Polling
+app.get("/api/chat/youtube/status", (req, res) => {
+  res.json({
+    connected: activeYoutubeVideoId !== null,
+    videoId: activeYoutubeVideoId,
+  });
+});
+
 app.post("/api/chat/youtube/start", (req, res) => {
   const { videoId } = req.body;
   if (!videoId) {
@@ -427,10 +721,6 @@ app.post("/api/chat/tiktok/connect", async (req, res) => {
     tiktokConnection = null;
   }
   activeTiktokUsername = null;
-  if (tiktokFallbackInterval) {
-    clearInterval(tiktokFallbackInterval);
-    tiktokFallbackInterval = null;
-  }
 
   console.log(`[TikTok] Mencoba menghubungkan ke live stream: ${cleanUsername}`);
 
@@ -530,10 +820,6 @@ app.post("/api/chat/tiktok/disconnect", (req, res) => {
     }
     tiktokConnection = null;
   }
-  if (tiktokFallbackInterval) {
-    clearInterval(tiktokFallbackInterval);
-    tiktokFallbackInterval = null;
-  }
   const prevUsername = activeTiktokUsername;
   activeTiktokUsername = null;
   res.json({ success: true, username: prevUsername });
@@ -555,61 +841,26 @@ app.post("/api/chat/facebook/connect", (req, res) => {
 
   const cleanPageId = pageId.trim();
 
-  // Clear existing Facebook flow
-  if (facebookFallbackInterval) {
-    clearInterval(facebookFallbackInterval);
-    facebookFallbackInterval = null;
-  }
   activeFacebookPageId = cleanPageId;
 
-  // Push immediate system connection message
+  // Push immediate system connection message explaining how to pull real chats
   setTimeout(() => {
     const welcomeMsg: ChatMessage = {
       id: `fb-system-${Date.now()}`,
       platform: "facebook",
       author: "Sistem",
-      message: `[KONEKSI AKTIF] Terhubung ke Facebook Live Page [ID: ${cleanPageId}] (Smart Direct Mode). Memulai monitoring live chat...`,
+      message: `[KONEKSI AKTIF] Menunggu komentar nyata Facebook Live Page [ID: ${cleanPageId}]. Silakan klik "Copy Script Linker" di bagian 'Kanal Linker' di panel Sumber Platform, lalu tempelkan di Developer Console (F12) browser Anda yang sedang membuka halaman Facebook Live streaming untuk mengirimkan komentar secara waktu nyata!`,
       timestamp: Date.now(),
     };
     chatHistory.push(welcomeMsg);
     broadcastMessage(welcomeMsg);
   }, 100);
 
-  // Setup comment loop
-  facebookFallbackInterval = setInterval(() => {
-    if (activeFacebookPageId !== cleanPageId) {
-      if (facebookFallbackInterval) clearInterval(facebookFallbackInterval);
-      return;
-    }
-
-    const { names, messages } = INDONESIAN_CHAT_POOL.facebook;
-    const author = names[Math.floor(Math.random() * names.length)];
-    const text = messages[Math.floor(Math.random() * messages.length)];
-    const avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=${author}`;
-
-    const msg: ChatMessage = {
-      id: `fb-gen-${Date.now()}`,
-      platform: "facebook",
-      author,
-      message: text,
-      timestamp: Date.now(),
-      avatar,
-    };
-
-    chatHistory.push(msg);
-    if (chatHistory.length > historyLimit) chatHistory.shift();
-    broadcastMessage(msg);
-  }, 4500);
-
   console.log(`[Facebook] Stream started for Page ID: ${cleanPageId}`);
   res.json({ success: true, pageId: cleanPageId });
 });
 
 app.post("/api/chat/facebook/disconnect", (req, res) => {
-  if (facebookFallbackInterval) {
-    clearInterval(facebookFallbackInterval);
-    facebookFallbackInterval = null;
-  }
   const prevPageId = activeFacebookPageId;
   activeFacebookPageId = null;
   console.log(`[Facebook] Stream disconnected for Page ID: ${prevPageId}`);
@@ -632,35 +883,45 @@ app.post("/api/chat/external", (req, res) => {
     avatar: avatar || "",
   };
 
-  chatHistory.push(newMsg);
-  if (chatHistory.length > historyLimit) chatHistory.shift();
-  
-  broadcastMessage(newMsg);
+  insertChatMessage(newMsg);
   res.json({ success: true, message: newMsg });
 });
 
-// Simulate chat elements for setup validation & offline testing
-app.post("/api/chat/simulate", (req, res) => {
-  const { author, message, platform } = req.body;
-  if (!author || !message) {
-    return res.status(400).json({ error: "Missing parameter details" });
+// GET endpoint for external chat intake - used by Image ping fallback to bypass YouTube CSP connect-src block!
+app.get("/api/chat/external", (req, res) => {
+  const { id, platform, author, message, avatar } = req.query;
+  
+  const cleanAuthor = typeof author === "string" ? author.trim() : "";
+  const cleanMessage = typeof message === "string" ? message.trim() : "";
+  
+  if (!cleanAuthor || !cleanMessage) {
+    // Return standard transparent 1x1 GIF for image loaders on bad requests
+    const transparentGif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+    res.writeHead(400, { "Content-Type": "image/gif" });
+    return res.end(transparentGif);
   }
 
-  const simulatedMsg: ChatMessage = {
-    id: `sim-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-    platform: platform || "simulation",
-    author,
-    message,
+  const newMsg: ChatMessage = {
+    id: (typeof id === "string" ? id : "") || `ext-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+    platform: (platform as any) || "youtube",
+    author: cleanAuthor,
+    message: cleanMessage,
     timestamp: Date.now(),
-    avatar: "",
+    avatar: (typeof avatar === "string" ? avatar : "") || "",
   };
 
-  chatHistory.push(simulatedMsg);
-  if (chatHistory.length > historyLimit) chatHistory.shift();
+  insertChatMessage(newMsg);
 
-  broadcastMessage(simulatedMsg);
-  res.json({ success: true, message: simulatedMsg });
+  // Return a transparent 1x1 pixel image as response for seamless bypass loading
+  const transparentGif = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
+  res.writeHead(200, {
+    "Content-Type": "image/gif",
+    "Cache-Control": "no-store, no-cache, must-revalidate, private",
+  });
+  res.end(transparentGif);
 });
+
+
 
 // Event Source SSE listener for real-time delivery
 app.get("/api/chat/events", (req, res) => {

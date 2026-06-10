@@ -1,35 +1,37 @@
 import React, { useMemo } from "react";
 import { ChatMessage } from "../types";
-import { BarChart3, TrendingUp, Users, Radio, ShieldCheck } from "lucide-react";
+import { BarChart3, TrendingUp, Users, ShieldCheck } from "lucide-react";
 
 interface LiveAnalyticsCardProps {
   chatHistory: ChatMessage[];
-  activeClients: number;
   isSpeaking: boolean;
 }
 
-export default function LiveAnalyticsCard({ chatHistory, activeClients, isSpeaking }: LiveAnalyticsCardProps) {
+export default function LiveAnalyticsCard({ chatHistory, isSpeaking }: LiveAnalyticsCardProps) {
   // Compute analytics dynamically
   const stats = useMemo(() => {
     let ytCount = 0;
     let ttCount = 0;
     let fbCount = 0;
-    let simCount = 0;
+    const uniqueChatters = new Set<string>();
 
     chatHistory.forEach((msg) => {
       if (msg.platform === "youtube") ytCount++;
       else if (msg.platform === "tiktok") ttCount++;
       else if (msg.platform === "facebook") fbCount++;
-      else simCount++;
+      
+      if (msg.author && msg.author !== "Sistem") {
+        uniqueChatters.add(msg.author);
+      }
     });
 
-    const total = chatHistory.length || 1;
+    const total = (ytCount + ttCount + fbCount) || 1;
     return {
       ytPercent: Math.round((ytCount / total) * 100),
       ttPercent: Math.round((ttCount / total) * 100),
       fbPercent: Math.round((fbCount / total) * 100),
-      simPercent: Math.round((simCount / total) * 100),
       totalMessages: chatHistory.length,
+      uniqueChattersCount: uniqueChatters.size,
     };
   }, [chatHistory]);
 
@@ -58,11 +60,11 @@ export default function LiveAnalyticsCard({ chatHistory, activeClients, isSpeaki
         </div>
 
         <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-850">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Connections</p>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Chatters</p>
           <p className="text-2xl font-mono font-bold text-indigo-400 mt-1">
-            {activeClients}
+            {stats.uniqueChattersCount}
           </p>
-          <span className="text-[9px] text-slate-500">Active OBS sources</span>
+          <span className="text-[9px] text-slate-500">Unique accounts</span>
         </div>
       </div>
 

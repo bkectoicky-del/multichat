@@ -6,14 +6,11 @@ import { VoiceSettingsCard, SafetySettingsCard } from "./components/SettingsPane
 import SourcePlatformCard from "./components/SourcePlatformCard";
 import LiveChatFeedCard from "./components/LiveChatFeedCard";
 import LiveAnalyticsCard from "./components/LiveAnalyticsCard";
-import OBSOverlayView from "./components/OBSOverlayView";
-import { Radio, LayoutDashboard } from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
 
 export default function App() {
-  const [isOverlayRoute, setIsOverlayRoute] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [activeClients, setActiveClients] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [currentlySpokenText, setCurrentlySpokenText] = useState("");
   const [activeYoutubeVideoId, setActiveYoutubeVideoId] = useState<string | null>(null);
@@ -77,6 +74,7 @@ export default function App() {
     filterSystemMessages: true,
     playLocal: true,
     playOverlay: true,
+    filterTtsMode: "all",
   });
 
   const [customApiUrl, setCustomApiUrl] = useState<string>(() => {
@@ -93,26 +91,34 @@ export default function App() {
   const sseRef = useRef<EventSource | null>(null);
   const dashboardSpeechQueueRef = useRef<ChatMessage[]>([]);
   const isDashboardSpeakingRef = useRef<boolean>(false);
+  const lastSpokenTimestampRef = useRef<number>(Date.now());
 
-  // Handle routing based on pathname
+  // Set host origin URL
   useEffect(() => {
     if (typeof window !== "undefined") {
       setAppUrl(window.location.origin);
-      if (window.location.pathname === "/overlay" || window.location.hash.includes("/overlay")) {
-        setIsOverlayRoute(true);
-      }
     }
   }, []);
 
   // Fetch initial configs, settings, and full chat log history
   useEffect(() => {
-    if (isOverlayRoute) return;
-
     // Load persisted configurations
     const saved = localStorage.getItem("live_tts_settings");
     if (saved) {
       try {
-        setSettings(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setSettings((prev) => ({
+          ...prev,
+          ...parsed,
+          enabledPlatforms: {
+            youtube: true,
+            tiktok: true,
+            facebook: true,
+            ...(prev.enabledPlatforms || {}),
+            ...(parsed.enabledPlatforms || {}),
+          },
+          filterTtsMode: parsed.filterTtsMode || "all",
+        }));
       } catch (e) {
         console.error("Failed to load saved tts configurations", e);
       }
@@ -127,6 +133,18 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Error fetching chat history logs:", err));
+
+    // Fetch active YouTube connection status
+    fetch(apiBase + "/api/chat/youtube/status")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.connected && data.videoId) {
+          setActiveYoutubeVideoId(data.videoId);
+        } else {
+          setActiveYoutubeVideoId(null);
+        }
+      })
+      .catch((err) => console.error("Error syncing active YouTube status:", err));
 
     // Fetch active TikTok connection status
     fetch(apiBase + "/api/chat/tiktok/status")
@@ -153,12 +171,40 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Error syncing active Facebook status:", err));
-  }, [isOverlayRoute, apiBase]);
+  }, [apiBase]);
 
   // Persists changes to Settings
   const handleSettingsChange = (newSettings: SpeechSettings) => {
     setSettings(newSettings);
     localStorage.setItem("live_tts_settings", JSON.stringify(newSettings));
+  };
+
+  // Toggles local TTS from master switch (Header)
+  const handleTogglePlayLocal = () => {
+    const nextState = !settings.playLocal;
+    
+    // Clear speech backlog and stop ongoing voice speaks when toggled
+    dashboardSpeechQueueRef.current = [];
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      isDashboardSpeakingRef.current = false;
+      setIsSpeaking(false);
+      setCurrentlySpokenText("");
+    }
+    
+    handleSettingsChange({
+      ...settings,
+      playLocal: nextState,
+    });
+    
+    showNotification(
+      "info",
+      "system",
+      nextState ? "Auto-TTS Diaktifkan" : "Auto-TTS Dimatikan",
+      nextState 
+        ? "Komentar live baru akan disuarakan secara otomatis." 
+        : "TTS disenyapkan. Klik tombol 'Speak' di sebelah komentar untuk membaca secara manual."
+    );
   };
 
   // Run Dashboard Local TTS Speech Queue (only plays when playLocal is checked)
@@ -221,8 +267,6 @@ export default function App() {
 
   // Connect to SSE stream
   useEffect(() => {
-    if (isOverlayRoute) return;
-
     console.log("[Dashboard] Initializing Event Source listener to:", apiBase + "/api/chat/events");
     const sse = new EventSource(apiBase + "/api/chat/events");
     sseRef.current = sse;
@@ -236,14 +280,10 @@ export default function App() {
         const msg = JSON.parse(event.data);
         if (msg.type === "connected") {
           console.log("[Dashboard] SSE Handshake Complete:", msg.id);
-          if (msg.clientCount !== undefined) {
-            setActiveClients(msg.clientCount);
-          }
           return;
         }
 
         if (msg.type === "stats") {
-          setActiveClients(msg.clientCount);
           return;
         }
 
@@ -254,8 +294,9 @@ export default function App() {
           return updated;
         });
 
-        // Trigger local TTS speech queue
-        if (settings.playLocal && settings.enabledPlatforms[msg.platform]) {
+        // Trigger local TTS speech queue (only play if the message is newer than the last manually spoken timestamp mark)
+        const isMsgNewer = msg.timestamp >= lastSpokenTimestampRef.current;
+        if (settings.playLocal && settings.enabledPlatforms[msg.platform] && isMsgNewer) {
           dashboardSpeechQueueRef.current.push(msg);
           processDashboardSpeechQueue();
         }
@@ -274,10 +315,17 @@ export default function App() {
         sseRef.current.close();
       }
     };
-  }, [isOverlayRoute, settings, apiBase]);
+  }, [settings, apiBase]);
 
   // Repeated voice triggered manually from row action
   const handlePlaySingleSpeech = (msg: ChatMessage) => {
+    // Empty the automatic queue to prevent read-from-start or backlog read congestion
+    dashboardSpeechQueueRef.current = [];
+    isDashboardSpeakingRef.current = false;
+    
+    // Set the latest timestamp mark to this message's timestamp so only subsequent newer chats are auto-spoken
+    lastSpokenTimestampRef.current = msg.timestamp;
+
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       
@@ -328,7 +376,7 @@ export default function App() {
             "YouTube Terhubung",
             `Berhasil terhubung ke YouTube Video ID: ${data.activeVideoId}!`
           );
-          handleSimulateMessage(
+          appendSystemMessage(
             "Sistem",
             `[KONEKSI AKTIF] Mulai memantau YouTube Live Chat Video ID: ${data.activeVideoId}`,
             "youtube"
@@ -379,7 +427,7 @@ export default function App() {
             "TikTok Terhubung",
             `Berhasil terhubung ke siaran live @${data.username}!`
           );
-          handleSimulateMessage(
+          appendSystemMessage(
             "Sistem",
             `[KONEKSI AKTIF] Berhasil terhubung ke live stream TikTok @${data.username}. Memulai monitoring live chat...`,
             "tiktok"
@@ -466,17 +514,24 @@ export default function App() {
       });
   };
 
-  // Simulate comment injection
-  const handleSimulateMessage = (
+  // Local system connection logs helper
+  const appendSystemMessage = (
     author: string,
     message: string,
-    platform: "tiktok" | "youtube" | "facebook" | "simulation"
+    platform: "tiktok" | "youtube" | "facebook" | "system"
   ) => {
-    fetch(apiBase + "/api/chat/simulate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ author, message, platform }),
-    }).catch((e) => console.error("Error triggering simulation chat message", e));
+    const sysMsg: ChatMessage = {
+      id: `sys-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      platform: platform as any,
+      author,
+      message,
+      timestamp: Date.now(),
+    };
+    setChatHistory((prev) => {
+      const updated = [...prev, sysMsg];
+      if (updated.length > 200) updated.shift();
+      return updated;
+    });
   };
 
   // Clear Chat History Logs
@@ -491,11 +546,6 @@ export default function App() {
       .catch((e) => console.error("Error clearing logs history database", e));
   };
 
-  // ---- ROUTING FOR TRANSPARENT OVERLAY SOURCE FOR OBS STUDIO ----
-  if (isOverlayRoute) {
-    return <OBSOverlayView appUrl={appUrl} />;
-  }
-
   // ---- ROUTING FOR STREAMER CONTROL DASHBOARD ----
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 selection:bg-indigo-500/30 selection:text-white">
@@ -508,31 +558,21 @@ export default function App() {
               Streamer Workspace Panel
             </span>
           </div>
-
-          <a
-            href="/overlay"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 p-1.5 px-3 bg-pink-950/40 text-pink-300 hover:text-white border border-pink-900/60 rounded-lg text-xs font-semibold cursor-pointer transition hover:bg-pink-900/40"
-          >
-            <Radio className="w-3.5 h-3.5 text-pink-500 animate-pulse" />
-            Buka Overlay di Tab Baru
-          </a>
         </div>
 
         {/* Global Stats and Action Header */}
         <Header
           isConnected={isConnected}
-          activeClients={activeClients}
-          overlayUrl={`${appUrl}/overlay`}
           isSpeaking={isSpeaking}
           currentSpokenText={currentlySpokenText}
           onClearHistory={handleClearHistory}
+          playLocal={settings.playLocal}
+          onTogglePlayLocal={handleTogglePlayLocal}
         />
 
         {/* Workspace Layout Columns arranged in high-density Bento Grid style */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
-          {/* Bento Cell 1: Platforms connector & Simulator (Colspan 4) */}
+          {/* Bento Cell 1: Platforms connector (Colspan 4) */}
           <div className="md:col-span-4 flex flex-col gap-5">
             <SourcePlatformCard
               appUrl={appUrl}
@@ -554,8 +594,6 @@ export default function App() {
               onConnectFacebook={handleConnectFacebook}
               onDisconnectFacebook={handleDisconnectFacebook}
 
-              onSimulateMessage={handleSimulateMessage}
-
               customApiUrl={customApiUrl}
               onChangeCustomApiUrl={handleCustomApiUrlChange}
             />
@@ -573,7 +611,6 @@ export default function App() {
           <div className="md:col-span-3 flex flex-col gap-5">
             <LiveAnalyticsCard
               chatHistory={chatHistory}
-              activeClients={activeClients}
               isSpeaking={isSpeaking}
             />
 

@@ -21,7 +21,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tiktok-live-connector": "^2.1.1-beta1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "youtube-chat": "^2.2.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

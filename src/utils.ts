@@ -1,6 +1,66 @@
 import { ChatMessage, SpeechSettings } from "./types";
 
 /**
+ * Helper to identify if a comment belongs to a follower, subscriber, or contributor
+ */
+export function isSenderFollowerOrSubscriber(msg: ChatMessage): boolean {
+  const text = (msg.message || "").toLowerCase();
+  const author = (msg.author || "").toLowerCase();
+  
+  if (author === "sistem") return true;
+
+  if (msg.platform === "tiktok") {
+    return (
+      text.includes("hadiah") ||
+      text.includes("mengirimkan") ||
+      text.includes("follow") ||
+      text.includes("follback") ||
+      text.includes("menyukai") ||
+      text.includes("share") ||
+      text.includes("mawar") ||
+      text.includes("kopi") ||
+      text.includes("mahkota") ||
+      text.includes("pesawat") ||
+      text.includes("jantung") ||
+      text.includes("terima kasih")
+    );
+  }
+  
+  if (msg.platform === "youtube") {
+    return (
+      text.includes("super chat") ||
+      text.includes("superchat") ||
+      text.includes("sebesar") ||
+      text.includes("subscriber") ||
+      text.includes("subscribe") ||
+      text.includes("membership") ||
+      text.includes("member") ||
+      text.includes("mabar") ||
+      text.includes("rp")
+    );
+  }
+  
+  if (msg.platform === "facebook") {
+    return (
+      text.includes("share") ||
+      text.includes("membagikan") ||
+      text.includes("cod") ||
+      text.includes("inbox") ||
+      text.includes("pengikut") ||
+      text.includes("bantu share") ||
+      text.includes("up")
+    );
+  }
+
+  return (
+    text.includes("share") ||
+    text.includes("follow") ||
+    text.includes("subs") ||
+    text.includes("hadiah")
+  );
+}
+
+/**
  * Validates and formats chat messages for Text-To-Speech according to user configurations
  */
 export function formatSpeechText(msg: ChatMessage, settings: SpeechSettings): string | null {
@@ -9,12 +69,17 @@ export function formatSpeechText(msg: ChatMessage, settings: SpeechSettings): st
     return null;
   }
 
-  // 2. Check minimum length
+  // 2. Check follower filter mode if enabled
+  if (settings.filterTtsMode === "only_contributors" && !isSenderFollowerOrSubscriber(msg)) {
+    return null;
+  }
+
+  // 3. Check minimum length
   if (msg.message.trim().length < settings.minMessageLength) {
     return null;
   }
 
-  // 3. Filter ignored keywords (case-insensitive)
+  // 4. Filter ignored keywords (case-insensitive)
   const containsIgnored = settings.ignoredKeywords.some((keyword) => {
     const cleanWord = keyword.trim().toLowerCase();
     return cleanWord && msg.message.toLowerCase().includes(cleanWord);
@@ -23,7 +88,7 @@ export function formatSpeechText(msg: ChatMessage, settings: SpeechSettings): st
     return null;
   }
 
-  // 4. Format the final read string
+  // 5. Format the final read string
   let output = settings.nicknameReadFormat;
   const authorName = settings.readUsername ? msg.author : "Seseorang";
   
@@ -40,45 +105,17 @@ export function formatSpeechText(msg: ChatMessage, settings: SpeechSettings): st
 export function generateBookmarkletCode(appUrl: string): string {
   const targetUrl = `${appUrl}/api/chat/external`;
 
-  // The code inside runs on TikTok Live, Facebook Live, or YouTube Live page inside the streamer's browser.
+  /* The code inside runs on TikTok Live, Facebook Live, or YouTube Live page inside the streamer's browser. */
   const scriptContent = `
 (function() {
   const SERVER_URL = "${targetUrl}";
-  console.log("%c[Live Stream Reader Linker Activated]%c Connects to: " + SERVER_URL, "color: #ff0055; font-weight: bold; font-size: 14px", "color: #33ff33");
+  console.log("%c[OmniStream Linker Activated]%c Target: " + SERVER_URL, "color: #818cf8; font-weight: bold; font-size: 14px", "color: #34d399");
 
-  let lastSentMessages = new Set();
+  let processedHashes = new Set();
+  let sentCount = 0;
   let observer = null;
 
-  function sendToServer(author, message, platform) {
-    const hash = author + "::" + message;
-    if (lastSentMessages.has(hash)) return;
-    lastSentMessages.add(hash);
-    
-    // Clear set cache periodically to avoid excessive memory
-    if (lastSentMessages.size > 200) {
-      lastSentMessages.clear();
-    }
-
-    console.log("[" + platform.toUpperCase() + "] Sending:", author, "->", message);
-    
-    fetch(SERVER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        id: "ext-" + Date.now() + "-" + Math.floor(Math.random() * 100000),
-        platform: platform,
-        author: author,
-        message: message,
-        avatar: ""
-      })
-    })
-    .then(r => r.json())
-    .catch(err => console.error("Error pushing chat message:", err));
-  }
-
-  // Detect which platform page is currently loaded
+  /* Detect which platform page is currently loaded */
   let platform = "tiktok";
   if (window.location.host.includes("facebook.com")) {
     platform = "facebook";
@@ -86,105 +123,249 @@ export function generateBookmarkletCode(appUrl: string): string {
     platform = "youtube";
   }
 
-  console.log("Detected platform as: " + platform.toUpperCase());
+  /* Set the target document context */
+  let doc = document;
+  if (platform === "youtube") {
+    const iframe = document.querySelector("iframe#chatframe") || document.querySelector("iframe[src*='live_chat']");
+    if (iframe) {
+      try {
+        if (iframe.contentDocument) {
+          doc = iframe.contentDocument;
+          console.log("[OmniStream YouTube] Terhubung dengan dokumen iframe chat.");
+        }
+      } catch (e) {
+        console.warn("[OmniStream YouTube] Tidak dapat mengakses iframe. Memantau dari body utama.", e);
+      }
+    }
+  }
 
-  function parseAndSendNode(node) {
+  /* UI HUD Builder */
+  function createHUD() {
+    const existing = doc.getElementById("omnistream-hud");
+    if (existing) existing.remove();
+
+    const hud = doc.createElement("div");
+    hud.id = "omnistream-hud";
+    hud.style.position = "fixed";
+    hud.style.bottom = "20px";
+    hud.style.right = "20px";
+    hud.style.zIndex = "100000";
+    hud.style.background = "#0f172a";
+    hud.style.border = "2px solid #4f46e5";
+    hud.style.borderRadius = "16px";
+    hud.style.padding = "12px 18px";
+    hud.style.color = "#ffffff";
+    hud.style.fontFamily = "system-ui, -apple-system, sans-serif";
+    hud.style.fontSize = "12px";
+    hud.style.boxShadow = "0 10px 30px rgba(0,0,0,0.6), 0 0 15px rgba(79, 70, 229, 0.4)";
+    hud.style.display = "flex";
+    hud.style.flexDirection = "column";
+    hud.style.gap = "4px";
+    hud.style.minWidth = "180px";
+    hud.style.pointerEvents = "auto";
+
+    hud.innerHTML = \`
+      <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155;padding-bottom:6px;margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:bold;color:#fff;">
+          <span style="width:8px;height:8px;background:#10b981;border-radius:50%;display:inline-block;box-shadow:0 0 8px #10b981;"></span>
+          <span>OMNISTREAM ACTIVE</span>
+        </div>
+        <button id="omnistream-hud-close" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-weight:bold;font-size:12px;padding:0 2px;">×</button>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;">Platfrom: <strong style="color:#e2e8f0;text-transform:uppercase;">\${platform}</strong></div>
+      <div style="font-size:11px;color:#94a3b8;">Komentar Terkirim: <strong id="omnistream-count" style="color:#38bdf8;font-size:13px;font-family:monospace;">0</strong></div>
+    \`;
+
+    const styleEl = doc.createElement("style");
+    styleEl.innerHTML = \`
+      #omnistream-hud button:hover { color: #f43f5e !important; }
+    \`;
+    doc.head.appendChild(styleEl);
+
+    doc.body.appendChild(hud);
+
+    doc.getElementById("omnistream-hud-close").addEventListener("click", () => {
+      hud.remove();
+    });
+  }
+
+  function updateHUDCounter() {
+    const el = doc.getElementById("omnistream-count");
+    if (el) el.textContent = sentCount;
+  }
+
+  function sendToServer(author, message, plat) {
+    const cleanAuthor = author.replace(/\\\\s*:\\\\s*$/, "").trim();
+    const cleanMessage = message.trim();
+    if (!cleanAuthor || !cleanMessage) return;
+
+    const msgId = "ext-" + Date.now() + "-" + Math.floor(Math.random() * 100000);
+    let fetchSuccess = false;
+
+    /* Channel A: Direct POST fetch */
+    fetch(SERVER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        id: msgId,
+        platform: plat,
+        author: cleanAuthor,
+        message: cleanMessage,
+        avatar: ""
+      })
+    })
+    .then(r => {
+      if (r.ok) {
+        fetchSuccess = true;
+        sentCount++;
+        updateHUDCounter();
+      } else {
+        throw new Error("HTTP error " + r.status);
+      }
+    })
+    .catch(err => {
+      console.warn("[OmniStream] Direct POST failed or blocked by CSP. Falling back to GET Image-load CSP bypass...", err);
+      
+      /* Channel B: GET Image load bypass for Youtube/CSP environments */
+      try {
+        const img = new Image();
+        img.onload = function() {
+          if (!fetchSuccess) {
+            sentCount++;
+            updateHUDCounter();
+            fetchSuccess = true;
+          }
+        };
+        img.onerror = function(e) {
+          console.error("[OmniStream] Image CSP bypass failed as well:", e);
+        };
+        img.src = SERVER_URL + "?id=" + encodeURIComponent(msgId) + 
+                  "&platform=" + encodeURIComponent(plat) + 
+                  "&author=" + encodeURIComponent(cleanAuthor) + 
+                  "&message=" + encodeURIComponent(cleanMessage) + 
+                  "&t=" + Date.now();
+      } catch (ex) {
+        console.error("[OmniStream] CSP bypass crash:", ex);
+      }
+    });
+  }
+
+  /* Parser for live chat rows based on active platform selectors */
+  function processNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
 
-    // --- TIKTOK LIVE DOM MATCHING ---
+    if (platform === "youtube") {
+      const authorEl = node.querySelector("#author-name") || node.querySelector(".author") || node.querySelector(".yt-live-chat-author-chip");
+      const messageEl = node.querySelector("#message") || node.querySelector(".message") || node.querySelector("#content");
+      if (authorEl && messageEl) {
+        const id = node.id || node.getAttribute("id") || "";
+        const author = authorEl.textContent.trim();
+        const msg = messageEl.textContent.trim();
+        const key = id || (author + "::" + msg);
+
+        if (!processedHashes.has(key)) {
+          processedHashes.add(key);
+          sendToServer(author, msg, "youtube");
+        }
+      }
+    }
+
     if (platform === "tiktok") {
-      // General selectors or text lookups
-      // TikTok typically obfuscates classes, but let's locate spans containing nicknames or message contents.
       const nickEl = node.querySelector('[class*="Nickname"]') || 
                      node.querySelector('[class*="nickname"]') || 
                      node.querySelector('[data-e2e="chat-username"]') ||
-                     node.querySelector('.nickname') ||
-                     node.querySelector('.username');
+                     node.querySelector('.nickname');
                      
       const msgEl = node.querySelector('[class*="comment"]') || 
                     node.querySelector('[class*="Comment"]') || 
                     node.querySelector('[data-e2e="chat-message"]') ||
-                    node.querySelector('.comment') ||
                     node.querySelector('.text');
 
       if (nickEl && msgEl) {
-        const nick = nickEl.textContent.replace(/\\s*:\\s*$/, "").trim();
-        const text = msgEl.textContent.trim();
-        if (nick && text) {
-          sendToServer(nick, text, "tiktok");
-        }
-      } else {
-        // Fallback for flat structure or text chunks
-        const textContent = node.textContent || "";
-        if (textContent.includes(":")) {
-          const parts = textContent.split(":");
-          const nick = parts[0].trim();
-          const text = parts.slice(1).join(":").trim();
-          if (nick.length > 0 && nick.length < 30 && text.length > 0) {
-            sendToServer(nick, text, "tiktok");
-          }
+        const author = nickEl.textContent.trim();
+        const msg = msgEl.textContent.trim();
+        const key = author + "::" + msg;
+
+        if (!processedHashes.has(key)) {
+          processedHashes.add(key);
+          sendToServer(author, msg, "tiktok");
         }
       }
     }
 
-    // --- FACEBOOK LIVE DOM MATCHING ---
     if (platform === "facebook") {
-      const msgTextEl = node.querySelector('span[dir="auto"]') || node.querySelector('.comment-text') || node;
       const authorEl = node.querySelector('a[role="link"]') || node.querySelector('strong') || node.querySelector('.comment-author');
-      
-      if (authorEl && msgTextEl) {
-        const author = authorEl.textContent.trim();
-        const message = msgTextEl.textContent.replace(author, "").trim();
-        if (author && message) {
-          sendToServer(author, message, "facebook");
-        }
-      }
-    }
+      const msgEl = node.querySelector('span[dir="auto"]') || node.querySelector('.comment-text');
 
-    // --- YOUTUBE LIVE (Fallback / Studio Page scraper) ---
-    if (platform === "youtube") {
-      const authorEl = node.querySelector("#author-name") || node.querySelector(".author");
-      const messageEl = node.querySelector("#message") || node.querySelector(".message");
-      if (authorEl && messageEl) {
-        sendToServer(authorEl.textContent.trim(), messageEl.textContent.trim(), "youtube");
+      if (authorEl && msgEl) {
+        const author = authorEl.textContent.trim();
+        const msg = msgEl.textContent.replace(author, "").trim();
+        const key = author + "::" + msg;
+
+        if (author && msg && !processedHashes.has(key)) {
+          processedHashes.add(key);
+          sendToServer(author, msg, "facebook");
+        }
       }
     }
   }
 
-  // Find chat scrolling containers dynamically to bind MutationObserver
+  /* Chat lists container discovery */
   function findChatContainer() {
     if (platform === "tiktok") {
-      return document.querySelector('[class*="chat-container"]') || 
-             document.querySelector('[class*="ChatMessageContainer"]') ||
-             document.querySelector('.tiktok-room-chat-item-container') ||
-             document.querySelector('ul.chat-container') ||
-             document.querySelector('.room-chat-box') ||
-             document.querySelector('.chat-list') ||
-             document.body;
+      return doc.querySelector('[class*="chat-container"]') || 
+             doc.querySelector('[class*="ChatMessageContainer"]') ||
+             doc.querySelector('.tiktok-room-chat-item-container') ||
+             doc.querySelector('ul.chat-container') ||
+             doc.body;
     }
     if (platform === "facebook") {
-      return document.querySelector('[role="log"]') || 
-             document.querySelector('.comments-container') ||
-             document.querySelector('.comment-list') ||
-             document.body;
+      return doc.querySelector('[role="log"]') || 
+             doc.querySelector('.comments-container') ||
+             doc.querySelector('.comment-list') ||
+             doc.body;
     }
-    return document.body;
+    if (platform === "youtube") {
+      return doc.querySelector("#items.yt-live-chat-item-list-renderer") || 
+             doc.querySelector("yt-live-chat-item-list-renderer") ||
+             doc.querySelector("#chat-messages") ||
+             doc.body;
+    }
+    return doc.body;
   }
 
+  /* Batch scan fallback */
+  function performPeriodicScan() {
+    if (platform === "youtube") {
+      const items = doc.querySelectorAll("yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer, yt-live-chat-membership-item-renderer");
+      items.forEach(node => processNode(node));
+    } else if (platform === "tiktok") {
+      const items = doc.querySelectorAll('[class*="ChatMessageContainer"] > div, .tiktok-room-chat-item-container > div, ul.chat-container li');
+      items.forEach(node => processNode(node));
+    } else if (platform === "facebook") {
+      const items = doc.querySelectorAll('[role="article"], .comment-list li, .comments-container div');
+      items.forEach(node => processNode(node));
+    }
+  }
+
+  createHUD();
   const container = findChatContainer();
-  console.log("Observing chat container:", container);
+  console.log("[OmniStream] Watching chat container:", container);
 
   observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       mutation.addedNodes.forEach((node) => {
-        // Parse the node itself
-        parseAndSendNode(node);
-        
-        // Also look inside for sub-nodes
+        processNode(node);
         if (node.querySelectorAll) {
-          // TikTok
-          const items = node.querySelectorAll('[class*="item"]') || [];
-          items.forEach(item => parseAndSendNode(item));
+          if (platform === "youtube") {
+            node.querySelectorAll("yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer").forEach(n => processNode(n));
+          } else if (platform === "tiktok") {
+            node.querySelectorAll("div").forEach(n => processNode(n));
+          } else if (platform === "facebook") {
+            node.querySelectorAll("div").forEach(n => processNode(n));
+          }
         }
       });
     });
@@ -195,10 +376,29 @@ export function generateBookmarkletCode(appUrl: string): string {
     subtree: true
   });
 
-  alert("Live stream connector linked successfully! Chats from this page will now automatically play TTS on your overlay.");
+  setInterval(performPeriodicScan, 1200);
+
+  /* Splash success banner notification */
+  const banner = doc.createElement("div");
+  banner.id = "omnistream-banner";
+  banner.style.position = "fixed";
+  banner.style.top = "10px";
+  banner.style.left = "50%";
+  banner.style.transform = "translateX(-50%)";
+  banner.style.zIndex = "100001";
+  banner.style.background = "#10b981";
+  banner.style.color = "white";
+  banner.style.fontWeight = "bold";
+  banner.style.padding = "8px 16px";
+  banner.style.borderRadius = "8px";
+  banner.style.boxShadow = "0 4px 12px rgba(16,185,129,0.3)";
+  banner.style.fontFamily = "system-ui, sans-serif";
+  banner.style.fontSize = "12px";
+  banner.textContent = "OmniStream Live Connector Berhasil Terpasang! HUD Aktif di Kanan Bawah.";
+  doc.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 4000);
 })();
   `;
 
-  // Return standard javascript bookmarklet string
   return `javascript:${encodeURIComponent(scriptContent.replace(/\s+/g, " "))}`;
 }

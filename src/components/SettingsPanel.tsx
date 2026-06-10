@@ -168,6 +168,81 @@ export function VoiceSettingsCard({ settings, onChangeSettings }: VoiceSettingsC
           />
         </div>
 
+        {/* TTS Target / Filter Type */}
+        <div className="space-y-2 pt-2 border-t border-slate-850">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            🎯 TARGET TTS FILTER
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => onChangeSettings({ ...settings, filterTtsMode: "all" })}
+              className={`py-2 px-1 text-[10.5px] font-bold rounded-lg border transition-all cursor-pointer text-center ${
+                (settings.filterTtsMode || "all") === "all"
+                  ? "bg-indigo-900/30 border-indigo-500/50 text-indigo-300 shadow-sm shadow-indigo-950/40"
+                  : "bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              Semua Chat
+            </button>
+            <button
+              onClick={() => onChangeSettings({ ...settings, filterTtsMode: "only_contributors" })}
+              className={`py-2 px-1 text-[10.5px] font-bold rounded-lg border transition-all cursor-pointer text-center ${
+                settings.filterTtsMode === "only_contributors"
+                  ? "bg-indigo-900/30 border-indigo-500/50 text-indigo-300 shadow-sm shadow-indigo-950/40"
+                  : "bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              Follower & Subscriber
+            </button>
+          </div>
+          <div className="text-[10px] text-slate-500 leading-relaxed font-medium">
+            💡 <b className="text-slate-450">Follower & Subscriber</b>: Hanya membaca live Chat kontributor yang mengirim hadiah/gift, mawar, super chat, share live, menyukai, atau menuliskan kata <span className="text-indigo-400/85">follow</span> / <span className="text-indigo-400/85">sub</span> / <span className="text-indigo-400/85">share</span>.
+          </div>
+        </div>
+
+        {/* Active Platform selection toggles */}
+        <div className="space-y-2 pt-2 border-t border-slate-850">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            🌐 PLATFORM BERSUARA (TTS)
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.keys(settings.enabledPlatforms || {})
+              .filter((plat) => plat !== "simulation")
+              .map((plat) => {
+                const label =
+                  plat === "youtube"
+                    ? "📺 YouTube"
+                    : plat === "tiktok"
+                    ? "🎵 TikTok"
+                    : "👥 Facebook";
+                const isEnabled = !!(settings.enabledPlatforms as any)[plat];
+                return (
+                  <button
+                    key={plat}
+                    type="button"
+                    onClick={() => {
+                      onChangeSettings({
+                        ...settings,
+                        enabledPlatforms: {
+                          ...settings.enabledPlatforms,
+                          [plat]: !isEnabled,
+                        } as any,
+                      });
+                    }}
+                    className={`py-2 px-2 rounded-lg border text-[10.5px] font-bold transition duration-150 cursor-pointer flex items-center justify-between ${
+                      isEnabled
+                        ? "bg-slate-900/80 border-indigo-500/50 text-indigo-300 shadow-sm"
+                        : "bg-slate-950 border-slate-850 text-slate-500 hover:text-slate-400"
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span className={`w-2 h-2 rounded-full ${isEnabled ? "bg-indigo-400 shadow-[0_0_6px_#6366f1]" : "bg-slate-800"}`}></span>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
+
         {/* Audio Destination toggles */}
         <div className="flex flex-col gap-2 bg-slate-950/40 p-3 rounded-xl border border-slate-850 mt-1">
           <label className="flex items-center gap-2 text-xs text-slate-400 select-none cursor-pointer">
@@ -187,15 +262,6 @@ export function VoiceSettingsCard({ settings, onChangeSettings }: VoiceSettingsC
               className="rounded bg-slate-950 border-slate-800 text-indigo-500 w-3.5 h-3.5 focus:ring-0"
             />
             <span>Putar TTS di Dashboard</span>
-          </label>
-          <label className="flex items-center gap-2 text-xs text-slate-400 select-none cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.playOverlay}
-              onChange={() => handleToggle("playOverlay")}
-              className="rounded bg-slate-950 border-slate-800 text-indigo-500 w-3.5 h-3.5 focus:ring-0"
-            />
-            <span>Kirim ke OBS Browser Source</span>
           </label>
         </div>
       </div>

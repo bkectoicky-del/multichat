@@ -1,6 +1,6 @@
 export interface ChatMessage {
   id: string;
-  platform: "youtube" | "tiktok" | "facebook" | "simulation";
+  platform: "youtube" | "tiktok" | "facebook" | "system";
   author: string;
   message: string;
   timestamp: number;
@@ -21,9 +21,8 @@ export interface SpeechSettings {
     youtube: boolean;
     tiktok: boolean;
     facebook: boolean;
-    simulation: boolean;
   };
   filterSystemMessages: boolean;
   playLocal: boolean;
-  playOverlay: boolean;
+  filterTtsMode?: "all" | "only_contributors";
 }
