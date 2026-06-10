@@ -1,5 +1,5 @@
 {
-  "name": "Live Stream Chat Reader TTS",
+  "name": "Icky multistream chat",
   "description": "A real-time live chat reader and Text-To-Speech (TTS) converter for TikTok Live, YouTube Live, and Facebook Live chat streaming overlays.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
