@@ -16,9 +16,9 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
   const [hidePlatform, setHidePlatform] = useState<boolean>(false);
   const [showAvatar, setShowAvatar] = useState<boolean>(true);
   const [maxChats, setMaxChats] = useState<number>(8);
-  const [layoutStyle, setLayoutStyle] = useState<"minimal" | "card" | "bubble">("bubble");
+  const [layoutStyle, setLayoutStyle] = useState<"bubble" | "transparent" | "glass" | "social-ninja" | "neon-glow" | "side-border" | "card">("bubble");
   const [direction, setDirection] = useState<"bottom-up" | "top-down">("bottom-up");
-  const [animationSpeed, setAnimationSpeed] = useState<"none" | "slice" | "fade">("slice");
+  const [animationSpeed, setAnimationSpeed] = useState<"slide-left" | "slide-right" | "slide-up" | "zoom-pop" | "fade" | "none">("slide-left");
   const [playTts, setPlayTts] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
@@ -212,8 +212,12 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none transition duration-150"
               >
                 <option value="bubble">Batu Slate / Bubble (Ada Background Halus)</option>
+                <option value="transparent">Transparent Overlay (Tanpa Background / Melayang)</option>
+                <option value="glass">Glassmorphic Glow (Frosted Glass Efek Blur)</option>
+                <option value="social-ninja">Social Stream Ninja (Gradient Samping Platform)</option>
+                <option value="neon-glow">Cyberpunk Neon Border (Efek Garis Bersinar)</option>
+                <option value="side-border">Modern Side Border Accent (Garis Samping Klasik)</option>
                 <option value="card">Modern Card Box (Kotak Minimalis Bergaris)</option>
-                <option value="minimal">Zero-Border (Teks Tanpa Balon / Klasik OBS)</option>
               </select>
             </div>
 
@@ -254,7 +258,10 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
                 onChange={(e) => setAnimationSpeed(e.target.value as any)}
                 className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none transition duration-150"
               >
-                <option value="slice">Smooth Slide & Fade (Rekomendasi)</option>
+                <option value="slide-left">Slide Kiri ke Kanan (Smooth Left-to-Right)</option>
+                <option value="slide-right">Slide Kanan ke Kiri (Smooth Right-to-Left)</option>
+                <option value="slide-up">Slide Meluncur Naik (From Bottom Up)</option>
+                <option value="zoom-pop">Zoom Pop-In (Pop Bounce)</option>
                 <option value="fade">Hanya Fade-In Efek Lembut</option>
                 <option value="none">Tanpa Animasi (Instan/CPU Ringan)</option>
               </select>
@@ -390,13 +397,43 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
                 const textShadowStyle = useTextShadow ? { textShadow: "1px 1px 3px rgba(0,0,0,0.95), -1px -1px 3px rgba(0,0,0,0.95), 0 0 5px rgba(0,0,0,0.8)" } : {};
                 const authorGlowStyle = authorColorMode === "neon" ? "shadow-[0_0_8px_rgba(255,255,255,0.25)] border-[0.5px] border-slate-100/10" : "";
 
+                const getSimulatedThemeClass = (themeName: string, platform: string) => {
+                  switch (themeName) {
+                    case "transparent":
+                      return "bg-transparent p-1 max-w-full border-none shadow-none";
+                    case "glass":
+                      return "bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl p-2.5 px-3.5 shadow-md max-w-[90%]";
+                    case "social-ninja":
+                      if (platform === "youtube") return "bg-gradient-to-r from-red-950/70 to-slate-900/35 border-l-4 border-red-500 rounded-lg p-2.5 px-3.5 shadow-md max-w-[90%]";
+                      if (platform === "tiktok") return "bg-gradient-to-r from-pink-950/70 to-slate-900/35 border-l-4 border-pink-500 rounded-lg p-2.5 px-3.5 shadow-md max-w-[90%]";
+                      if (platform === "facebook") return "bg-gradient-to-r from-blue-950/70 to-slate-900/35 border-l-4 border-blue-500 rounded-lg p-2.5 px-3.5 shadow-md max-w-[90%]";
+                      return "bg-gradient-to-r from-slate-950/70 to-slate-900/30 border-l-4 border-slate-500 rounded-lg p-2.5 px-3.5 shadow-md max-w-[90%]";
+                    case "neon-glow":
+                      let neonBorder = "border-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.25)]";
+                      if (platform === "youtube") neonBorder = "border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.25)]";
+                      if (platform === "tiktok") neonBorder = "border-pink-500 shadow-[0_0_8px_rgba(244,114,182,0.25)]";
+                      if (platform === "facebook") neonBorder = "border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.25)]";
+                      return `bg-black/95 border-[1.5px] ${neonBorder} rounded-xl p-2.5 px-3.5 max-w-[90%]`;
+                    case "side-border":
+                      let sideB = "border-l-indigo-500";
+                      if (platform === "youtube") sideB = "border-l-red-500";
+                      if (platform === "tiktok") sideB = "border-l-pink-500";
+                      if (platform === "facebook") sideB = "border-l-blue-450";
+                      return `bg-slate-950/95 border border-slate-950 border-l-[3.5px] ${sideB} rounded-r-xl p-2.5 px-3.5 max-w-[90%] shadow-md`;
+                    case "card":
+                      return "bg-slate-950/60 p-2.5 border border-white/[0.08] rounded-xl max-w-[90%] shadow-sm";
+                    case "bubble":
+                    default:
+                      return "bg-slate-900/90 p-2.5 px-3.5 border border-slate-800 shadow-md max-w-[90%]";
+                  }
+                };
+
+                const simulatedCardTheme = getSimulatedThemeClass(layoutStyle, msg.platform);
+
                 return (
                   <div
                     key={msg.id}
-                    className={`flex items-start gap-2.5 transition duration-150 rounded-xl leading-relaxed ${fontClass} ${
-                      layoutStyle === "bubble" ? "bg-slate-950/85 p-2.5 px-3.5 border border-slate-900 shadow-md max-w-[90%]" : 
-                      layoutStyle === "card" ? "bg-slate-950/40 p-2 border border-slate-800" : "p-0.5"
-                    }`}
+                    className={`flex items-start gap-2.5 transition duration-150 rounded-xl leading-relaxed ${fontClass} ${simulatedCardTheme}`}
                   >
                     {/* User profile picture/avatar if enabled */}
                     {showAvatar && (
@@ -463,6 +500,14 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
               <li>Set <span className="text-white font-bold">Width</span> ke <span className="text-pink-400 font-bold">420</span> dan <span className="text-white font-bold">Height</span> ke <span className="text-pink-400 font-bold">600</span> (sesuai rasio overlay live milik Anda).</li>
               <li>Centang opsi <span className="text-slate-350 italic">"Refresh browser when scene becomes active"</span> agar menyala otomatis. Klik OK!</li>
             </ol>
+            
+            {/* Helpful tip explaining dashboard speaking voice vs OBS Overlay voice */}
+            <div className="mt-2 bg-pink-500/5 border border-pink-500/10 p-2.5 rounded-lg space-y-1">
+              <p className="text-[9.5px] font-bold text-pink-450 uppercase tracking-wide">💡 INFO SUARA / TTS GANDA:</p>
+              <p className="text-[9px] text-slate-400 leading-relaxed">
+                Jika Anda masih mendengar suara pembaca chat (TTS) bersuara padahal opsi OBS sudah diset nonaktif (uncheck), hal ini kemungkinan besar karena <span className="text-pink-300 font-bold">Dashboard Utama Anda</span> di browser sedang membuka halaman kontrol utama dengan fitur <span className="text-white">"Auto-TTS"</span> menyala. Silakan matikan tombol <span className="text-indigo-400 font-bold">"Auto-TTS Diaktifkan"</span> di panel kiri Dashboard Utama Anda jika tidak ingin ada suara dari luar OBS.
+              </p>
+            </div>
           </div>
         </div>
 
