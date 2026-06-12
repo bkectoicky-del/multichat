@@ -19,6 +19,7 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
   const [layoutStyle, setLayoutStyle] = useState<"bubble" | "transparent" | "glass" | "social-ninja" | "neon-glow" | "side-border" | "card">("bubble");
   const [direction, setDirection] = useState<"bottom-up" | "top-down">("bottom-up");
   const [animationSpeed, setAnimationSpeed] = useState<"slide-left" | "slide-right" | "slide-up" | "zoom-pop" | "fade" | "none">("slide-left");
+  const [animDuration, setAnimDuration] = useState<number>(0.4);
   const [playTts, setPlayTts] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
@@ -41,6 +42,7 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
     params.set("theme", layoutStyle);
     params.set("direction", direction);
     params.set("animate", animationSpeed);
+    params.set("animDuration", String(animDuration));
     params.set("playTts", String(playTts));
 
     return `${appUrl}/overlay?${params.toString()}`;
@@ -250,9 +252,9 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
               </select>
             </div>
 
-            {/* Animation speeds layout */}
+            {/* Animation style layout */}
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Animasi Masuk</label>
+              <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Gaya Animasi Masuk</label>
               <select
                 value={animationSpeed}
                 onChange={(e) => setAnimationSpeed(e.target.value as any)}
@@ -264,6 +266,25 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
                 <option value="zoom-pop">Zoom Pop-In (Pop Bounce)</option>
                 <option value="fade">Hanya Fade-In Efek Lembut</option>
                 <option value="none">Tanpa Animasi (Instan/CPU Ringan)</option>
+              </select>
+            </div>
+
+            {/* Animation speed / duration layout */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Durasi Transisi / Kecepatan</label>
+                <span className="text-[10px] font-mono font-bold text-indigo-400">{animDuration}s</span>
+              </div>
+              <select
+                value={animDuration}
+                onChange={(e) => setAnimDuration(Number(e.target.value))}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500/60 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none transition duration-150"
+              >
+                <option value={0.15}>Kilat / Sangat Cepat (0.15s)</option>
+                <option value={0.3}>Cepat (0.30s)</option>
+                <option value={0.45}>Sedang / Normal (0.45s)</option>
+                <option value={0.75}>Lambat & Halus (0.75s)</option>
+                <option value={1.2}>Sangat Lambat (1.20s)</option>
               </select>
             </div>
           </div>

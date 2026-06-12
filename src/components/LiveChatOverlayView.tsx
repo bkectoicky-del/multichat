@@ -21,6 +21,7 @@ export default function LiveChatOverlayView() {
       direction: "bottom-up",
       animate: "slide-left",
       playTts: false,
+      animDuration: 0.40,
     };
 
     if (typeof window !== "undefined") {
@@ -39,6 +40,7 @@ export default function LiveChatOverlayView() {
         direction: search.get("direction") || "bottom-up",
         animate: search.get("animate") || "slide-left",
         playTts: search.get("playTts") === "true",
+        animDuration: parseFloat(search.get("animDuration") || "0.40"),
       };
     }
     return initialParams;
@@ -133,13 +135,14 @@ export default function LiveChatOverlayView() {
   // Advanced Entry, Layout, & Exit animations mimicking Social Stream Ninja configs
   const getAnimationVariants = () => {
     const anim = params.animate;
+    const dur = params.animDuration || 0.40;
     
     if (anim === "none") {
       return {
         initial: { opacity: 1 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: { duration: 0.1 }
+        transition: { duration: 0.05 }
       };
     }
     
@@ -148,47 +151,47 @@ export default function LiveChatOverlayView() {
         initial: { opacity: 0 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: { duration: 0.3 }
+        transition: { duration: dur }
       };
     }
 
     if (anim === "slide-left") {
       // Slide from left to right
       return {
-        initial: { opacity: 0, x: -60, scale: 0.95 },
+        initial: { opacity: 0, x: -80, scale: 0.95 },
         animate: { opacity: 1, x: 0, scale: 1 },
-        exit: { opacity: 0, x: -30, scale: 0.9 },
-        transition: { type: "spring", damping: 15, stiffness: 140 }
+        exit: { opacity: 0, x: -40, scale: 0.90, transition: { duration: dur * 0.7 } },
+        transition: { type: "tween", ease: "easeOut", duration: dur }
       };
     }
 
     if (anim === "slide-right") {
       // Slide from right to left
       return {
-        initial: { opacity: 0, x: 60, scale: 0.95 },
+        initial: { opacity: 0, x: 80, scale: 0.95 },
         animate: { opacity: 1, x: 0, scale: 1 },
-        exit: { opacity: 0, x: 30, scale: 0.9 },
-        transition: { type: "spring", damping: 15, stiffness: 140 }
+        exit: { opacity: 0, x: 40, scale: 0.90, transition: { duration: dur * 0.7 } },
+        transition: { type: "tween", ease: "easeOut", duration: dur }
       };
     }
 
     if (anim === "slide-up") {
       // Slide meluncur vertically from bottom up
       return {
-        initial: { opacity: 0, y: 50, scale: 0.95 },
+        initial: { opacity: 0, y: 55, scale: 0.95 },
         animate: { opacity: 1, y: 0, scale: 1 },
-        exit: { opacity: 0, y: -40, scale: 0.9 },
-        transition: { type: "spring", damping: 15, stiffness: 130 }
+        exit: { opacity: 0, y: -45, scale: 0.90, transition: { duration: dur * 0.7 } },
+        transition: { type: "tween", ease: "easeOut", duration: dur }
       };
     }
 
     if (anim === "zoom-pop") {
       // Pop zoom in bounce entry
       return {
-        initial: { opacity: 0, scale: 0.4 },
+        initial: { opacity: 0, scale: 0.35 },
         animate: { opacity: 1, scale: 1 },
-        exit: { opacity: 0, scale: 0.7, y: -20 },
-        transition: { type: "spring", damping: 11, stiffness: 160 }
+        exit: { opacity: 0, scale: 0.65, y: -20, transition: { duration: dur * 0.7 } },
+        transition: { type: "spring", damping: 14, stiffness: 155, duration: dur }
       };
     }
 
@@ -196,8 +199,8 @@ export default function LiveChatOverlayView() {
     return {
       initial: { opacity: 0, x: 35, scale: 0.94 },
       animate: { opacity: 1, x: 0, scale: 1 },
-      exit: { opacity: 0, y: -10, scale: 0.95 },
-      transition: { type: "spring", damping: 14, stiffness: 120 },
+      exit: { opacity: 0, y: -10, scale: 0.95, transition: { duration: dur * 0.7 } },
+      transition: { type: "tween", ease: "easeOut", duration: dur },
     };
   };
 
@@ -322,7 +325,7 @@ export default function LiveChatOverlayView() {
                   key={msg.id}
                   layout
                   {...getAnimationVariants()}
-                  className={`flex items-start gap-3 transition duration-155 leading-relaxed ${cardThemeClass}`}
+                  className={`flex items-start gap-3 leading-relaxed ${cardThemeClass}`}
                   style={{ pointerEvents: "none" }}
                 >
                   {/* Photo profile avatar source widget */}
