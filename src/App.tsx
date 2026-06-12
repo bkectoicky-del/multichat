@@ -8,6 +8,9 @@ import LiveChatFeedCard from "./components/LiveChatFeedCard";
 import LiveAnalyticsCard from "./components/LiveAnalyticsCard";
 import { LayoutDashboard } from "lucide-react";
 
+import ObsOverlayConfig from "./components/ObsOverlayConfig";
+import LiveChatOverlayView from "./components/LiveChatOverlayView";
+
 export default function App() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -92,6 +95,18 @@ export default function App() {
   const dashboardSpeechQueueRef = useRef<ChatMessage[]>([]);
   const isDashboardSpeakingRef = useRef<boolean>(false);
   const lastSpokenTimestampRef = useRef<number>(Date.now());
+
+  const [isOverlayRoute, setIsOverlayRoute] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const pathname = window.location.pathname;
+      const search = window.location.search;
+      if (pathname === "/overlay" || pathname.startsWith("/overlay") || search.includes("overlay=true")) {
+        setIsOverlayRoute(true);
+      }
+    }
+  }, []);
 
   // Set host origin URL
   useEffect(() => {
@@ -565,6 +580,10 @@ export default function App() {
   };
 
   // ---- ROUTING FOR STREAMER CONTROL DASHBOARD ----
+  if (isOverlayRoute) {
+    return <LiveChatOverlayView />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 selection:bg-indigo-500/30 selection:text-white">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -644,6 +663,9 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* OBS Browser Source Live Customizer Panel */}
+      <ObsOverlayConfig appUrl={appUrl} />
 
       {/* Floating high-density Toast Notification Panel */}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
