@@ -17,6 +17,7 @@ export default function LiveChatOverlayView() {
     theme: "bubble",
     direction: "bottom-up",
     animate: "slice",
+    playTts: false,
   });
 
   // Extract config parameters on mount
@@ -36,9 +37,23 @@ export default function LiveChatOverlayView() {
         theme: search.get("theme") || "bubble",
         direction: search.get("direction") || "bottom-up",
         animate: search.get("animate") || "slice",
+        playTts: search.get("playTts") === "true",
       });
     }
   }, []);
+
+  // Fetch initial chat history on mount so that the OBS HUD is populated instantly
+  useEffect(() => {
+    const apiBase = typeof window !== "undefined" ? window.location.origin : "";
+    fetch(`${apiBase}/api/chat/history`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.history && Array.isArray(data.history)) {
+          setChats(data.history.slice(-params.limit));
+        }
+      })
+      .catch((err) => console.error("[OBS Overlay] Error loading fallback history:", err));
+  }, [params.limit]);
 
   // Connect to the backend streaming events
   useEffect(() => {
@@ -62,6 +77,21 @@ export default function LiveChatOverlayView() {
             }
             return updated;
           });
+
+          // Perform local speaking TTS inside OBS only if playTts query parameter is explicitly true
+          if (params.playTts && typeof window !== "undefined" && window.speechSynthesis) {
+            const utterText = `${newMsg.author} berkata ${newMsg.message}`;
+            const utterance = new SpeechSynthesisUtterance(utterText);
+            utterance.lang = "id-ID";
+            // Auto find local indonesian voice
+            const voices = window.speechSynthesis.getVoices();
+            const idVoice = voices.find((v) => {
+              const l = v.lang.toLowerCase().replace("_", "-");
+              return l === "id-id" || l === "id" || l.startsWith("id-");
+            });
+            if (idVoice) utterance.voice = idVoice;
+            window.speechSynthesis.speak(utterance);
+          }
         }
       } catch (err) {
         console.error("[OBS Overlay] Failed to parse message event:", err);

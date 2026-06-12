@@ -19,6 +19,7 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
   const [layoutStyle, setLayoutStyle] = useState<"minimal" | "card" | "bubble">("bubble");
   const [direction, setDirection] = useState<"bottom-up" | "top-down">("bottom-up");
   const [animationSpeed, setAnimationSpeed] = useState<"none" | "slice" | "fade">("slice");
+  const [playTts, setPlayTts] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
 
@@ -40,6 +41,7 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
     params.set("theme", layoutStyle);
     params.set("direction", direction);
     params.set("animate", animationSpeed);
+    params.set("playTts", String(playTts));
 
     return `${appUrl}/overlay?${params.toString()}`;
   };
@@ -289,6 +291,19 @@ export default function ObsOverlayConfig({ appUrl }: ObsOverlayConfigProps) {
                 className="rounded text-indigo-600 bg-slate-950 border-slate-800 w-4 h-4 focus:ring-0 cursor-pointer"
               />
               <span className="text-[11px] text-slate-350 font-medium">Tampilkan Foto Profil (Avatar)</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none border border-slate-800/40 p-1 px-2 rounded-lg bg-slate-950/20">
+              <input
+                type="checkbox"
+                checked={playTts}
+                onChange={(e) => setPlayTts(e.target.checked)}
+                className="rounded text-pink-600 bg-slate-950 border-slate-800 w-4 h-4 focus:ring-0 cursor-pointer"
+              />
+              <div className="flex flex-col">
+                <span className="text-[11px] text-pink-450 font-bold">Aktifkan TTS di OBS</span>
+                <span className="text-[8.5px] text-slate-500 font-medium">(Rekomendasi: Matikan/Uncheck)</span>
+              </div>
             </label>
           </div>
 
