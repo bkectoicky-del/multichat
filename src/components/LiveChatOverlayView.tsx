@@ -66,8 +66,15 @@ export default function LiveChatOverlayView() {
     sse.onmessage = (event) => {
       try {
         const raw = JSON.parse(event.data);
-        if (raw.type === "chat") {
-          const newMsg: ChatMessage = raw.data;
+        
+        // Skip system events
+        if (raw.type === "connected" || raw.type === "stats") {
+          return;
+        }
+
+        // Validate that it's a ChatMessage with author and message content
+        if (raw && raw.author && raw.message) {
+          const newMsg: ChatMessage = raw;
           
           setChats((prev) => {
             let updated = [...prev, newMsg];
@@ -105,7 +112,7 @@ export default function LiveChatOverlayView() {
     return () => {
       sse.close();
     };
-  }, [params.limit]);
+  }, [params.limit, params.playTts]);
 
   // CSS Font Helper Mapping
   const getFontFamilyClass = (f: string) => {
@@ -153,6 +160,14 @@ export default function LiveChatOverlayView() {
       className={`min-h-screen w-full bg-transparent p-4 flex flex-col justify-end overflow-hidden ${fontClass} select-none`}
       style={{ overflow: "hidden", pointerEvents: "none" }}
     >
+      {/* Force complete document body background transparency for OBS Studio */}
+      <style>{`
+        html, body, #root {
+          background: transparent !important;
+          background-color: transparent !important;
+        }
+      `}</style>
+
       {/* Outer wrapper to force bottom-alignment or top-alignment */}
       <div 
         className={`w-full flex flex-col gap-3.5 max-w-xl mx-auto ${

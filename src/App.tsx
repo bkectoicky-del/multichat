@@ -96,17 +96,14 @@ export default function App() {
   const isDashboardSpeakingRef = useRef<boolean>(false);
   const lastSpokenTimestampRef = useRef<number>(Date.now());
 
-  const [isOverlayRoute, setIsOverlayRoute] = useState(false);
-
-  useEffect(() => {
+  const [isOverlayRoute] = useState(() => {
     if (typeof window !== "undefined") {
       const pathname = window.location.pathname;
       const search = window.location.search;
-      if (pathname === "/overlay" || pathname.startsWith("/overlay") || search.includes("overlay=true")) {
-        setIsOverlayRoute(true);
-      }
+      return pathname === "/overlay" || pathname.startsWith("/overlay") || search.includes("overlay=true");
     }
-  }, []);
+    return false;
+  });
 
   // Set host origin URL
   useEffect(() => {
@@ -291,6 +288,8 @@ export default function App() {
 
   // Connect to SSE stream
   useEffect(() => {
+    if (isOverlayRoute) return;
+
     console.log("[Dashboard] Initializing Event Source listener to:", apiBase + "/api/chat/events");
     const sse = new EventSource(apiBase + "/api/chat/events");
     sseRef.current = sse;
