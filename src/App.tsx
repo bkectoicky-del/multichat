@@ -55,7 +55,7 @@ export default function App() {
   const [isTiktokConnected, setIsTiktokConnected] = useState(false);
   const [isTiktokConnecting, setIsTiktokConnecting] = useState(false);
 
-  const [facebookPageId, setFacebookPageId] = useState("page_live_12");
+  const [facebookPageId, setFacebookPageId] = useState("");
   const [isFacebookConnected, setIsFacebookConnected] = useState(false);
   const [isFacebookConnecting, setIsFacebookConnecting] = useState(false);
 
@@ -499,7 +499,7 @@ export default function App() {
   // Facebook connection triggers
   const handleConnectFacebook = () => {
     if (!facebookPageId.trim()) {
-      showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan URL Pop-out Chat Facebook terlebih dahulu!");
+      showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan Username atau ID Facebook terlebih dahulu!");
       return;
     }
     setIsFacebookConnecting(true);

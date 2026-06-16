@@ -836,7 +836,7 @@ app.get("/api/chat/facebook/status", (req, res) => {
 app.post("/api/chat/facebook/connect", (req, res) => {
   const { pageId } = req.body;
   if (!pageId) {
-    return res.status(400).json({ error: "Facebook Pop-out Chat URL wajib diisi" });
+    return res.status(400).json({ error: "Facebook Username wajib diisi" });
   }
 
   const cleanPageId = pageId.trim();
@@ -871,14 +871,14 @@ app.post("/api/chat/facebook/connect", (req, res) => {
       id: `fb-system-${Date.now()}`,
       platform: "facebook",
       author: "Sistem",
-      message: `[KONEKSI AKTIF] Facebook Pop-out Chat terdeteksi (${displayId}). Silakan klik tombol "OMNISTREAM LINKER" di bilah bookmark browser Anda saat membuka jendela pop-out chat Facebook tersebut untuk menyambungkan chat secara real-time!`,
+      message: `[KONEKSI AKTIF] Facebook Halaman @${displayId} terdeteksi. Silakan klik tombol "OMNISTREAM LINKER" di bilah bookmark browser Anda saat membuka halaman Live Stream Facebook Anda untuk mentransfer komentar secara real-time!`,
       timestamp: Date.now(),
     };
     chatHistory.push(welcomeMsg);
     broadcastMessage(welcomeMsg);
   }, 100);
 
-  console.log(`[Facebook] Stream started for Page ID/URL: ${cleanPageId}`);
+  console.log(`[Facebook] Stream connected for Username/ID: ${cleanPageId}`);
   res.json({ success: true, pageId: cleanPageId });
 });
 

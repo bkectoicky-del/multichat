@@ -518,18 +518,18 @@ export default function SourcePlatformCard({
           <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1.5 text-[10px] text-slate-400 leading-relaxed">
             <span className="font-bold text-blue-450 uppercase tracking-wider block">📋 PETUNJUK KONEKSI FACEBOOK:</span>
             <ol className="list-decimal list-inside space-y-1 text-[9.5px]">
-              <li>Mulai siaran langsung Anda melalui <strong className="text-white">Facebook Live Producer</strong>.</li>
-              <li>Cari panel komentar/obrolan, klik ikon tiga titik (<strong className="text-white">...</strong>).</li>
-              <li>Pilih opsi <strong className="text-blue-400">Pop out chat</strong> atau <strong className="text-blue-400">Buka obrolan di jendela baru</strong>.</li>
-              <li><strong className="text-emerald-400">Salin URL</strong> dari jendela pop-out tersebut lalu masukkan ke bawah ini.</li>
+              <li>Buka siaran langsung Anda di <strong className="text-white">Facebook</strong> (melalui PC/Laptop).</li>
+              <li>Masukkan <strong className="text-emerald-400">Username Halaman</strong> atau <strong className="text-emerald-400">User ID Facebook</strong> Anda di kolom bawah.</li>
+              <li>Klik <strong className="text-white">Start Connection</strong> untuk mengaktifkan pemantau status.</li>
+              <li>Buka tab siaran langsung Facebook Anda lalu klik tombol <strong className="text-indigo-400">OMNISTREAM LINKER</strong> di bilah bookmark browser Anda untuk mentransfer chat secara real-time!</li>
             </ol>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Facebook Pop-out Chat URL</label>
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Facebook Page Username / ID</label>
             <input
               type="text"
-              placeholder="https://www.facebook.com/live/chat/?video_id=..."
+              placeholder="Contoh: bke.cto.icky atau ID_Halaman"
               value={facebookPageId}
               onChange={(e) => setFacebookPageId(e.target.value)}
               disabled={isFacebookConnected || isFacebookConnecting}
