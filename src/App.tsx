@@ -499,7 +499,7 @@ export default function App() {
   // Facebook connection triggers
   const handleConnectFacebook = () => {
     if (!facebookPageId.trim()) {
-      showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan Page ID Facebook terlebih dahulu!");
+      showNotification("error", "facebook", "Gagal Menghubungkan", "Masukkan URL Pop-out Chat Facebook terlebih dahulu!");
       return;
     }
     setIsFacebookConnecting(true);
@@ -517,11 +517,11 @@ export default function App() {
             "success",
             "facebook",
             "Facebook Terhubung",
-            `Berhasil terhubung ke Facebook Live Page ID: ${data.pageId}!`
+            `Berhasil terhubung ke Live Chat Facebook!`
           );
         } else {
           setIsFacebookConnected(false);
-          showNotification("error", "facebook", "Koneksi Gagal", "Gagal menghubungkan ke Facebook Live Page.");
+          showNotification("error", "facebook", "Koneksi Gagal", "Gagal menghubungkan ke Live Chat Facebook.");
         }
       })
       .catch((e) => {

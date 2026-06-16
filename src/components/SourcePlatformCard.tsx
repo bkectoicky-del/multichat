@@ -513,11 +513,23 @@ export default function SourcePlatformCard({
               <span className="text-[9.5px] font-semibold text-slate-500 bg-slate-950 border border-slate-850 px-2 py-0.5 rounded-full uppercase tracking-widest">Offline</span>
             )}
           </div>
+
+          {/* Connection Instructions Tutorial Block */}
+          <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1.5 text-[10px] text-slate-400 leading-relaxed">
+            <span className="font-bold text-blue-450 uppercase tracking-wider block">📋 PETUNJUK KONEKSI FACEBOOK:</span>
+            <ol className="list-decimal list-inside space-y-1 text-[9.5px]">
+              <li>Mulai siaran langsung Anda melalui <strong className="text-white">Facebook Live Producer</strong>.</li>
+              <li>Cari panel komentar/obrolan, klik ikon tiga titik (<strong className="text-white">...</strong>).</li>
+              <li>Pilih opsi <strong className="text-blue-400">Pop out chat</strong> atau <strong className="text-blue-400">Buka obrolan di jendela baru</strong>.</li>
+              <li><strong className="text-emerald-400">Salin URL</strong> dari jendela pop-out tersebut lalu masukkan ke bawah ini.</li>
+            </ol>
+          </div>
+
           <div className="space-y-2">
-            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Facebook Page ID</label>
+            <label className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Facebook Pop-out Chat URL</label>
             <input
               type="text"
-              placeholder="Page ID"
+              placeholder="https://www.facebook.com/live/chat/?video_id=..."
               value={facebookPageId}
               onChange={(e) => setFacebookPageId(e.target.value)}
               disabled={isFacebookConnected || isFacebookConnecting}

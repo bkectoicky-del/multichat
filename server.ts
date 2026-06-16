@@ -836,12 +836,34 @@ app.get("/api/chat/facebook/status", (req, res) => {
 app.post("/api/chat/facebook/connect", (req, res) => {
   const { pageId } = req.body;
   if (!pageId) {
-    return res.status(400).json({ error: "Facebook Page ID wajib diisi" });
+    return res.status(400).json({ error: "Facebook Pop-out Chat URL wajib diisi" });
   }
 
   const cleanPageId = pageId.trim();
-
   activeFacebookPageId = cleanPageId;
+
+  // Extract a friendly display ID if it's a URL
+  let displayId = cleanPageId;
+  if (cleanPageId.includes("facebook.com")) {
+    try {
+      const url = new URL(cleanPageId);
+      const videoId = url.searchParams.get("video_id") || url.searchParams.get("v");
+      if (videoId) {
+        displayId = `Video ID: ${videoId}`;
+      } else {
+        const parts = url.pathname.split("/").filter(Boolean);
+        if (parts.length > 0) {
+          displayId = parts[parts.length - 1];
+        }
+      }
+    } catch (e) {
+      if (cleanPageId.length > 35) {
+        displayId = cleanPageId.substring(0, 32) + "...";
+      }
+    }
+  } else if (cleanPageId.length > 35) {
+    displayId = cleanPageId.substring(0, 32) + "...";
+  }
 
   // Push immediate system connection message explaining how to pull real chats
   setTimeout(() => {
@@ -849,14 +871,14 @@ app.post("/api/chat/facebook/connect", (req, res) => {
       id: `fb-system-${Date.now()}`,
       platform: "facebook",
       author: "Sistem",
-      message: `[KONEKSI AKTIF] Menunggu komentar nyata Facebook Live Page [ID: ${cleanPageId}]. Silakan klik "Copy Script Linker" di bagian 'Kanal Linker' di panel Sumber Platform, lalu tempelkan di Developer Console (F12) browser Anda yang sedang membuka halaman Facebook Live streaming untuk mengirimkan komentar secara waktu nyata!`,
+      message: `[KONEKSI AKTIF] Facebook Pop-out Chat terdeteksi (${displayId}). Silakan klik tombol "OMNISTREAM LINKER" di bilah bookmark browser Anda saat membuka jendela pop-out chat Facebook tersebut untuk menyambungkan chat secara real-time!`,
       timestamp: Date.now(),
     };
     chatHistory.push(welcomeMsg);
     broadcastMessage(welcomeMsg);
   }, 100);
 
-  console.log(`[Facebook] Stream started for Page ID: ${cleanPageId}`);
+  console.log(`[Facebook] Stream started for Page ID/URL: ${cleanPageId}`);
   res.json({ success: true, pageId: cleanPageId });
 });
 
