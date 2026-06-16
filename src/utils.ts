@@ -252,6 +252,64 @@ export function generateBookmarkletCode(appUrl: string): string {
     });
   }
 
+  /* Helper to parse Facebook nodes recursively with superior accuracy */
+  function parseAndSendFacebookNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    
+    const authorLinks = Array.from(node.querySelectorAll('a[role="link"], strong, .comment-author'));
+    if (node.matches && (node.matches('a[role="link"]') || node.matches('strong') || node.matches('.comment-author'))) {
+      authorLinks.push(node);
+    }
+    
+    authorLinks.forEach(authorEl => {
+      const author = authorEl.textContent ? authorEl.textContent.trim() : "";
+      if (!author || author.length < 2 || author.length > 50) return;
+      
+      if (/^(Balas|Reply|Like|Sukai|Share|Bagikan|Follow|Ikuti)$/i.test(author)) return;
+      
+      let container = authorEl.parentElement;
+      let depth = 0;
+      let msg = "";
+      
+      while (container && depth < 4 && container !== doc.body) {
+        const potentialMsgs = Array.from(container.querySelectorAll('span[dir="auto"], span, div'));
+        for (const el of potentialMsgs) {
+          if (authorEl.contains(el) || el === authorEl) continue;
+          
+          const text = el.textContent ? el.textContent.trim() : "";
+          if (text && text !== author && !author.includes(text) && text.length > 0) {
+            if (el.getAttribute('dir') === 'auto' || el.tagName === 'SPAN') {
+              msg = text;
+              break;
+            }
+          }
+        }
+        if (msg) break;
+        container = container.parentElement;
+        depth++;
+      }
+      
+      if (!msg && authorEl.parentElement) {
+        const parentText = authorEl.parentElement.textContent || "";
+        const cleanText = parentText.replace(author, "").replace(/^\s*:\s*/, "").trim();
+        if (cleanText && cleanText.length > 0 && !/^(Balas|Reply|Like|Sukai|Share|Bagikan)$/i.test(cleanText)) {
+          msg = cleanText;
+        }
+      }
+      
+      if (author && msg) {
+        let cleanMsg = msg.replace(/\b(Balas|Reply|Ikuti|Follow)\b/gi, "").trim();
+        if (cleanMsg) {
+          const key = author + "::" + cleanMsg;
+          if (!processedHashes.has(key)) {
+            processedHashes.add(key);
+            sendToServer(author, cleanMsg, "facebook");
+          }
+        }
+      }
+    });
+  }
+
   /* Parser for live chat rows based on active platform selectors */
   function processNode(node) {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -276,7 +334,7 @@ export function generateBookmarkletCode(appUrl: string): string {
       const nickEl = node.querySelector('[class*="Nickname"]') || 
                      node.querySelector('[class*="nickname"]') || 
                      node.querySelector('[data-e2e="chat-username"]') ||
-                     node.querySelector('.nickname');
+                     node.nickname;
                      
       const msgEl = node.querySelector('[class*="comment"]') || 
                     node.querySelector('[class*="Comment"]') || 
@@ -296,19 +354,7 @@ export function generateBookmarkletCode(appUrl: string): string {
     }
 
     if (platform === "facebook") {
-      const authorEl = node.querySelector('a[role="link"]') || node.querySelector('strong') || node.querySelector('.comment-author');
-      const msgEl = node.querySelector('span[dir="auto"]') || node.querySelector('.comment-text');
-
-      if (authorEl && msgEl) {
-        const author = authorEl.textContent.trim();
-        const msg = msgEl.textContent.replace(author, "").trim();
-        const key = author + "::" + msg;
-
-        if (author && msg && !processedHashes.has(key)) {
-          processedHashes.add(key);
-          sendToServer(author, msg, "facebook");
-        }
-      }
+      parseAndSendFacebookNode(node);
     }
   }
 
@@ -345,8 +391,13 @@ export function generateBookmarkletCode(appUrl: string): string {
       const items = doc.querySelectorAll('[class*="ChatMessageContainer"] > div, .tiktok-room-chat-item-container > div, ul.chat-container li');
       items.forEach(node => processNode(node));
     } else if (platform === "facebook") {
-      const items = doc.querySelectorAll('[role="article"], .comment-list li, .comments-container div');
-      items.forEach(node => processNode(node));
+      const authorLinks = doc.querySelectorAll('a[role="link"], strong, .comment-author');
+      authorLinks.forEach(authorEl => {
+        const parent = authorEl.parentElement;
+        if (parent) {
+          parseAndSendFacebookNode(parent);
+        }
+      });
     }
   }
 
@@ -364,7 +415,12 @@ export function generateBookmarkletCode(appUrl: string): string {
           } else if (platform === "tiktok") {
             node.querySelectorAll("div").forEach(n => processNode(n));
           } else if (platform === "facebook") {
-            node.querySelectorAll("div").forEach(n => processNode(n));
+            const authorEls = node.querySelectorAll('a[role="link"], strong, .comment-author');
+            authorEls.forEach(authorEl => {
+              if (authorEl.parentElement) {
+                parseAndSendFacebookNode(authorEl.parentElement);
+              }
+            });
           }
         }
       });
