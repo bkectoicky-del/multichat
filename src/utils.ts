@@ -251,13 +251,21 @@ export function generateBookmarkletCode(appUrl: string): string {
       }
     });
   }
-
   /* Helper to parse Facebook nodes recursively with superior accuracy */
   function parseAndSendFacebookNode(node) {
     if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
     
-    const authorLinks = Array.from(node.querySelectorAll('a[role="link"], strong, .comment-author'));
-    if (node.matches && (node.matches('a[role="link"]') || node.matches('strong') || node.matches('.comment-author'))) {
+    const authorSelector = 'a, strong, [class*="author"], [class*="name"], [class*="nick"], [class*="user"], .comment-author';
+    const authorLinks = Array.from(node.querySelectorAll(authorSelector));
+    if (node.matches && (
+      node.matches('a') || 
+      node.matches('strong') || 
+      node.matches('[class*="author"]') || 
+      node.matches('[class*="name"]') || 
+      node.matches('[class*="nick"]') || 
+      node.matches('[class*="user"]') || 
+      node.matches('.comment-author')
+    )) {
       authorLinks.push(node);
     }
     
@@ -265,7 +273,19 @@ export function generateBookmarkletCode(appUrl: string): string {
       const author = authorEl.textContent ? authorEl.textContent.trim() : "";
       if (!author || author.length < 2 || author.length > 50) return;
       
-      if (/^(Balas|Reply|Like|Sukai|Share|Bagikan|Follow|Ikuti)$/i.test(author)) return;
+      const blocklist = /^(Balas|Reply|Replies|Like|Sukai|Suka|Share|Bagikan|Follow|Ikuti|View|Lihat|More|Lainnya|Sebelumnya|Write|Tulis|Comment|Komentar|Send|Kirim|Cancel|Batal|Hide|Sembunyikan|Report|Laporkan|Active|Aktif|Online|Offline|Live|Stream|Joined|Join|Gabung|Membagikan|Sponsor|Promoted|Iklan|Ad)$/i;
+      if (blocklist.test(author)) return;
+      
+      const nameLower = author.toLowerCase();
+      if (
+        nameLower.includes("komentar") || nameLower.includes("comment") || nameLower.includes("balas") || 
+        nameLower.includes("reply") || nameLower.includes("lihat") || nameLower.includes("view") || 
+        nameLower.includes("lainnya") || nameLower.includes("bagikan") || nameLower.includes("share") || 
+        nameLower.includes("suka") || nameLower.includes("like") || nameLower.includes("balasan") ||
+        nameLower.includes("replies")
+      ) {
+        return;
+      }
       
       let container = authorEl.parentElement;
       let depth = 0;
@@ -292,13 +312,21 @@ export function generateBookmarkletCode(appUrl: string): string {
       if (!msg && authorEl.parentElement) {
         const parentText = authorEl.parentElement.textContent || "";
         const cleanText = parentText.replace(author, "").replace(/^\s*:\s*/, "").trim();
-        if (cleanText && cleanText.length > 0 && !/^(Balas|Reply|Like|Sukai|Share|Bagikan)$/i.test(cleanText)) {
+        if (cleanText && cleanText.length > 0) {
           msg = cleanText;
         }
       }
       
       if (author && msg) {
         let cleanMsg = msg.replace(/\b(Balas|Reply|Ikuti|Follow)\b/gi, "").trim();
+        const msgLower = cleanMsg.toLowerCase();
+        if (
+          msgLower === "balas" || msgLower === "reply" || msgLower === "like" || msgLower === "sukai" || msgLower === "suka" ||
+          msgLower === "share" || msgLower === "bagikan" || msgLower === "kirim" || msgLower === "send" ||
+          msgLower === "tulis komentar..." || msgLower === "write a comment..." || msgLower.startsWith("lihat ") || msgLower.startsWith("view ") ||
+          msgLower.includes("balasan") || msgLower.includes("replies")
+        ) return;
+
         if (cleanMsg) {
           const key = author + "::" + cleanMsg;
           if (!processedHashes.has(key)) {
@@ -335,7 +363,7 @@ export function generateBookmarkletCode(appUrl: string): string {
                      node.querySelector('[class*="nickname"]') || 
                      node.querySelector('[data-e2e="chat-username"]') ||
                      node.nickname;
-                     
+                      
       const msgEl = node.querySelector('[class*="comment"]') || 
                     node.querySelector('[class*="Comment"]') || 
                     node.querySelector('[data-e2e="chat-message"]') ||
@@ -369,6 +397,9 @@ export function generateBookmarkletCode(appUrl: string): string {
     }
     if (platform === "facebook") {
       return doc.querySelector('[role="log"]') || 
+             doc.querySelector('[id*="live_comments"]') ||
+             doc.querySelector('[class*="comments"]') ||
+             doc.querySelector('[class*="comment_"]') ||
              doc.querySelector('.comments-container') ||
              doc.querySelector('.comment-list') ||
              doc.body;
@@ -391,7 +422,7 @@ export function generateBookmarkletCode(appUrl: string): string {
       const items = doc.querySelectorAll('[class*="ChatMessageContainer"] > div, .tiktok-room-chat-item-container > div, ul.chat-container li');
       items.forEach(node => processNode(node));
     } else if (platform === "facebook") {
-      const authorLinks = doc.querySelectorAll('a[role="link"], strong, .comment-author');
+      const authorLinks = doc.querySelectorAll('a, strong, [class*="author"], [class*="name"], [class*="nick"], [class*="user"], .comment-author');
       authorLinks.forEach(authorEl => {
         const parent = authorEl.parentElement;
         if (parent) {
@@ -415,7 +446,7 @@ export function generateBookmarkletCode(appUrl: string): string {
           } else if (platform === "tiktok") {
             node.querySelectorAll("div").forEach(n => processNode(n));
           } else if (platform === "facebook") {
-            const authorEls = node.querySelectorAll('a[role="link"], strong, .comment-author');
+            const authorEls = node.querySelectorAll('a, strong, [class*="author"], [class*="name"], [class*="nick"], [class*="user"], .comment-author');
             authorEls.forEach(authorEl => {
               if (authorEl.parentElement) {
                 parseAndSendFacebookNode(authorEl.parentElement);
